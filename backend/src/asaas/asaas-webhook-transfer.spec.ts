@@ -48,21 +48,27 @@ function setup(opts: {
       : opts.recibo,
   );
 
+  // Corretiva Asaas Webhook 2026-07-20 — TODO PAYMENT_* agora passa pela
+  // $transaction do processarWebhook (insert-first WebhookEvent). Mock
+  // executa o callback com um tx mock (sem rollback simulado).
+  const txMock = {
+    webhookEvent: { create: jest.fn().mockResolvedValue({}) },
+    asaasCobranca: { update: jest.fn() },
+  };
   const prisma: any = {
     asaasConfig: { findMany: findManyConfig },
     asaasCobranca: { findFirst: jest.fn().mockResolvedValue(null), update: jest.fn() },
     cooperTokenCompra: { findFirst: jest.fn().mockResolvedValue(null) },
     cobranca: { update: jest.fn() },
     resgateRecibo: { findFirst: findFirstRecibo },
+    $transaction: jest.fn(async (cb: any) => cb(txMock)),
   };
   const eventEmitter: any = { emit: jest.fn() };
+  // ModuleRef mock — não usado nos testes TRANSFER (que não caem no
+  // caminho darBaixaTx), mas o construtor precisa.
+  const moduleRefMock: any = { get: jest.fn() };
 
-  // AsaasService construtor (verificar signature antes — usa este shape no
-  // resto do projeto). Os outros deps são undefined porque essas branches
-  // não tocam HTTP nem AsaasConfig service.
-  // AsaasService constructor: (prisma, eventEmitter, credentialsEncryptor).
-  // O TRANSFER_* não toca credentialsEncryptor — mock undefined OK.
-  const sut = new AsaasService(prisma, eventEmitter, undefined as any);
+  const sut = new AsaasService(prisma, eventEmitter, undefined as any, moduleRefMock);
   return { sut, prisma, eventEmitter, findFirstRecibo };
 }
 

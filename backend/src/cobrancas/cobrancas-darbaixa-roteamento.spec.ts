@@ -74,7 +74,8 @@ describe('CobrancasService.darBaixa — D-FISCAL-2.4.4c (roteamento fiscal)', ()
       cooperTokenMock,
       tokenContabilMock,
       multaJurosMock,
-      contabilidadeMock,
+      undefined, // cooperadoClubeService (11º arg @Optional — não usado neste spec)
+      contabilidadeMock, // contabilidadeTributaria (12º arg @Optional — foco do spec)
     );
     // Defaults pra fluxo de baixa funcionar
     updateManyCobranca.mockResolvedValue({ count: 1 });

@@ -10,6 +10,13 @@ import { EncryptionModule } from '../gateways-pagamento-config/encryption.module
  * pelo dual-write em AsaasService.salvarConfig (grava simultaneamente
  * em AsaasConfig legado + ConfigGateway novo durante a coexistencia
  * de 30 dias).
+ *
+ * Corretiva Asaas Webhook 2026-07-20 — CobrancasService resolvido via
+ * ModuleRef.get({ strict: false }) DENTRO do AsaasService (lazy, no
+ * runtime do processarWebhook). Não adiciona imports circulares no
+ * grafo de módulos (evita ciclo triangular Gateway→Asaas→Cobrancas→Gateway
+ * que forwardRef não conseguia resolver com Whatsapp/Faturas/CooperToken
+ * já no grafo).
  */
 @Module({
   imports: [EncryptionModule],

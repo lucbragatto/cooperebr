@@ -718,6 +718,174 @@ export class CooperTokenService {
    * Bloco C avalia se vale extrair `_debitarTx(tx, params)` interno que
    * sirva debitar() + usarNaFatura sem nested-tx.
    */
+  /**
+   * Corretiva Asaas Webhook 2026-07-20 (sessão dedicada) — variante TX-AWARE
+   * do `creditar` pra chamadores que já rodam dentro de uma `$transaction`
+   * externa (ex.: `processarWebhook` do Asaas, via `CobrancasService.darBaixaTx`).
+   *
+   * Diferenças vs `creditar` público:
+   *  - Recebe `tx: Prisma.TransactionClient` — todo I/O usa o tx passado,
+   *    zero `$transaction` aninhada.
+   *  - SEM post-tx side effects (naturezaAto/AuditLog SOCIAL/eventos
+   *    contábeis). Caller decide se emite esses — no webhook, ficam
+   *    best-effort pós-commit fora da tx.
+   *  - MANTÉM fast-path idempotente via `tx.cooperTokenLedger.findFirst`.
+   *    Sem ele, cenário: 1º webhook cria ledger CLUBE, mas rollback do
+   *    WebhookEvent → retry → fast-path vê null → cria → P2002 do
+   *    unique parcial → rollback → loop. Fast-path corta antes.
+   *  - MANTÉM validações críticas do `creditar` (quantidade > 0, cooperado
+   *    existe/ATIVO, cross-tenant guard).
+   *
+   * Contract: se retorna, o ledger foi criado OU já existia (idempotente).
+   * Se throw, a `$transaction` do caller deve rollback (Asaas retry).
+   */
+  async creditarTx(tx: Prisma.TransactionClient, params: CreditarParams) {
+    const {
+      cooperadoId,
+      cooperativaId,
+      tipo,
+      quantidade,
+      valorEmissao,
+      referenciaId,
+      referenciaTabela,
+      expiracaoMeses = 12,
+    } = params;
+
+    // Validação de quantidade (espelha creditar :405).
+    if (!Number.isFinite(quantidade) || quantidade <= 0) {
+      throw new BadRequestException(
+        `creditarTx: quantidade deve ser número finito > 0 (recebido ${quantidade}).`,
+      );
+    }
+
+    // Cooperado existe + ATIVO + cross-tenant (espelha creditar :412-431).
+    const cooperado = await tx.cooperado.findUnique({
+      where: { id: cooperadoId },
+      select: { id: true, status: true, cooperativaId: true },
+    });
+    if (!cooperado) {
+      throw new BadRequestException(`creditarTx: cooperado ${cooperadoId} não encontrado.`);
+    }
+    if (cooperado.cooperativaId !== cooperativaId) {
+      throw new BadRequestException(
+        `creditarTx: cross-tenant bloqueado — cooperado ${cooperadoId} pertence a ${cooperado.cooperativaId}, mas creditar veio com ${cooperativaId}.`,
+      );
+    }
+    if (!CooperTokenService.STATUS_PERMITIDOS_CREDITO.includes(cooperado.status)) {
+      throw new BadRequestException(
+        `creditarTx: cooperado ${cooperadoId} com status ${cooperado.status} — crédito de ${quantidade} ${tipo} negado (requer ATIVO).`,
+      );
+    }
+
+    // Fast-path idempotente: se ledger com essa ref já existe, retorna
+    // sem re-criar. Sem P2002, sem side-effect. Crucial pra loops de
+    // retry do webhook Asaas quando WebhookEvent faz rollback mas o
+    // ledger interno já commitou em execução anterior.
+    if (referenciaId && referenciaTabela) {
+      const jaCredidato = await tx.cooperTokenLedger.findFirst({
+        where: {
+          referenciaId,
+          referenciaTabela,
+          cooperadoId,
+          cooperativaId,
+          operacao: CooperTokenOperacao.CREDITO,
+        },
+      });
+      if (jaCredidato) {
+        this.logger.log(
+          `creditarTx: fast-path idempotente — ${referenciaTabela}/${referenciaId} cooperado ${cooperadoId} já creditado (ledger=${jaCredidato.id}), pula create`,
+        );
+        return jaCredidato;
+      }
+    }
+
+    // Taxa via ConfigCooperToken (getConfig lê `this.prisma` — read-only,
+    // não bloqueia a tx passada).
+    const configEmissao = await this.getConfig(cooperativaId);
+    const { taxa: taxaEmissao, liquido: quantidadeLiquida } = calcularTaxa(
+      'emissao',
+      quantidade,
+      configEmissao,
+    );
+
+    const forcarDisponivel = params.forcarDisponivel === true;
+    const deveSerDisponivel = forcarDisponivel || cooperado.status === 'ATIVO_RECEBENDO_CREDITOS';
+
+    const valorReaisLedger =
+      valorEmissao != null ? Math.round(quantidadeLiquida * valorEmissao * 100) / 100 : null;
+
+    // Body — mesmo shape do creditar :476-548.
+    // Corretiva Asaas Webhook 2026-07-20 (A2 P2 revisor) — arredondamento
+    // consistente a 4 casas decimais (schema: Decimal @db.Decimal(10, 4)).
+    // Sem isso, soma acumulada de Number→Number pode gerar drift float
+    // (ex.: 0.1 + 0.2 = 0.30000000000000004) e cooperado vê saldo com
+    // 15+ casas ao invés do padrão contábil de token (10.4).
+    let saldo = await tx.cooperTokenSaldo.findUnique({ where: { cooperadoId } });
+    const campoSaldo = deveSerDisponivel ? 'saldoDisponivel' : 'saldoPendente';
+    const novoValor =
+      Math.round((Number(saldo?.[campoSaldo] ?? 0) + quantidadeLiquida) * 10000) / 10000;
+    const novoTotalEmitido =
+      Math.round((Number(saldo?.totalEmitido ?? 0) + quantidadeLiquida) * 10000) / 10000;
+
+    if (saldo) {
+      saldo = await tx.cooperTokenSaldo.update({
+        where: { cooperadoId },
+        data: { [campoSaldo]: novoValor, totalEmitido: novoTotalEmitido },
+      });
+    } else {
+      saldo = await tx.cooperTokenSaldo.create({
+        data: {
+          cooperadoId,
+          cooperativaId,
+          [campoSaldo]: quantidadeLiquida,
+          totalEmitido: quantidadeLiquida,
+        },
+      });
+    }
+
+    const expiracaoEm = new Date();
+    expiracaoEm.setMonth(expiracaoEm.getMonth() + expiracaoMeses);
+
+    const entry = await tx.cooperTokenLedger.create({
+      data: {
+        cooperadoId,
+        cooperativaId,
+        tipo,
+        operacao: CooperTokenOperacao.CREDITO,
+        quantidade: quantidadeLiquida,
+        saldoApos: novoValor,
+        valorReais: valorReaisLedger,
+        referenciaId,
+        referenciaTabela,
+        expiracaoEm,
+        descricao: `Crédito ${tipo} de ${quantidadeLiquida} tokens (bruto: ${quantidade}, taxa: ${taxaEmissao})`,
+      },
+    });
+
+    if (valorReaisLedger != null && valorReaisLedger > 0) {
+      const competencia = new Date().toISOString().slice(0, 7);
+      await tx.lancamentoCaixa.create({
+        data: {
+          tipo: 'PROVISIONAL',
+          descricao: `Emissão ${tipo}: ${quantidadeLiquida} tokens (R$ ${valorReaisLedger.toFixed(2)})`,
+          valor: valorReaisLedger,
+          competencia,
+          status: 'PROVISIONAL',
+          naturezaClube: 'PROVISIONAL_TOKEN_EMISSAO',
+          cooperTokenLedgerId: entry.id,
+          cooperadoId,
+          cooperativaId,
+        },
+      });
+    }
+
+    this.logger.log(
+      `creditarTx: ${quantidadeLiquida} tokens líquidos (${tipo}) pra cooperado ${cooperadoId} | bruto=${quantidade} taxa=${taxaEmissao} — ledger=${entry.id}`,
+    );
+
+    return entry;
+  }
+
   async debitar(params: DebitarParams) {
     // Corretiva CooperToken 2026-07-20 (P2 #1 do revisor financeiro) —
     // retry wrapper pra SerializationFailure (código Postgres 40001).

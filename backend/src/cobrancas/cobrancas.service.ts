@@ -13,7 +13,7 @@ import { TokenContabilService } from '../financeiro/token-contabil.service';
 import { CalculoMultaJurosService } from './calculo-multa-juros.service';
 // Sprint Onboarding Bloco 0 Fatia 0.4 (06/06/2026) — clube discriminado.
 import { CooperadoClubeService } from '../cooperado-clube/cooperado-clube.service';
-import { CooperTokenTipo } from '@prisma/client';import { AsPlatform } from '../common/tenant-context';
+import { CooperTokenTipo, Prisma } from '@prisma/client';import { AsPlatform } from '../common/tenant-context';
 
 
 // Calcula valorDesconto e valorLiquido respeitando o modo de remuneração.
@@ -489,6 +489,297 @@ export class CobrancasService {
       data: data as any,
       include: { contrato: { include: { cooperado: true } } },
     });
+  }
+
+  /**
+   * Corretiva Asaas Webhook 2026-07-20 (sessão dedicada) — variante TX-AWARE
+   * do `darBaixa` pra `processarWebhook` do Asaas invocar dentro da sua própria
+   * `$transaction` (que também insere o WebhookEvent como fonte única de
+   * idempotência).
+   *
+   * Diferenças vs `darBaixa` público:
+   *  - Recebe `tx: Prisma.TransactionClient` — zero `$transaction` aninhada.
+   *  - Executa APENAS efeitos ESSENCIAIS (atômicos com WebhookEvent):
+   *      1. Cobranca.updateMany PAGO (CAS anti-race preservado)
+   *      2. LancamentoCaixa PREVISTO→REALIZADO
+   *      3. Tokens CLUBE via `creditarTx` (se modoRemuneracao=='CLUBE' e
+   *         valorDesconto > 0)
+   *  - NÃO executa best-effort: notificações WA/Email, evento cobranca.primeira.paga
+   *    (MLM cascade), hook CT.3 (contabilidade tributária), métricas Clube de
+   *    Vantagens. Esses o caller (webhook) deve chamar SEPARADAMENTE pós-commit.
+   *  - Throw se qualquer essencial falhar → caller faz rollback → Asaas re-tenta.
+   *
+   * Guard de duplicidade: se cobrança já está PAGO/CANCELADO, `updateMany` retorna
+   * count=0 e este método throw. Combinado com a idempotência do WebhookEvent
+   * (P2002 na 2ª entrega), evita duplo pagamento.
+   */
+  async darBaixaTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      cobrancaId: string;
+      dataPagamento: Date;
+      valorPago: number;
+      metodoPagamento?: string;
+    },
+  ) {
+    const { cobrancaId, dataPagamento: dtPagamento, valorPago, metodoPagamento } = params;
+
+    const cobranca = await tx.cobranca.findFirst({
+      where: { id: cobrancaId },
+      include: { contrato: { include: { cooperado: true } } },
+    });
+    if (!cobranca) {
+      throw new NotFoundException(`darBaixaTx: cobrança ${cobrancaId} não encontrada`);
+    }
+
+    // 1) UPDATE PAGO com CAS — se já foi PAGO/CANCELADO, count=0 → throw
+    //    (defesa em profundidade DEPOIS da idempotência do WebhookEvent).
+    // Corretiva Asaas Webhook 2026-07-20 (A1 P1 revisor) — `valorPago`
+    // vem de `payment.value` do JSON externo do Asaas (tipo `any`).
+    // Math.round pra evitar centavos de drift de float propagando
+    // pra Cobranca.valorPago e LancamentoCaixa.valor.
+    const valorFinal = Math.round((valorPago ?? Number(cobranca.valorLiquido)) * 100) / 100;
+    const updated = await tx.cobranca.updateMany({
+      where: { id: cobrancaId, status: { notIn: ['PAGO', 'CANCELADO'] } },
+      data: {
+        status: 'PAGO',
+        dataPagamento: dtPagamento,
+        valorPago: valorFinal,
+      },
+    });
+    if (updated.count === 0) {
+      throw new BadRequestException(
+        `darBaixaTx: cobrança ${cobrancaId} já PAGA/CANCELADA (processamento concorrente ou re-entrega)`,
+      );
+    }
+
+    // 2) LancamentoCaixa PREVISTO→REALIZADO. Diferente do darBaixa público
+    //    (que engolia erro com try/warn), aqui deixa propagar — se lançamento
+    //    falha, a tx rollback e Asaas re-tenta.
+    const nomeCooperado = cobranca.contrato?.cooperado?.nomeCompleto || 'Cooperado';
+    const mesRef = `${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`;
+    const competencia = `${cobranca.anoReferencia}-${String(cobranca.mesReferencia).padStart(2, '0')}`;
+
+    const lancamentoExistente = await tx.lancamentoCaixa.findFirst({
+      where: {
+        observacoes: { contains: `Ref. cobrança ${cobranca.id}` },
+        status: 'PREVISTO',
+      },
+    });
+    if (lancamentoExistente) {
+      await tx.lancamentoCaixa.update({
+        where: { id: lancamentoExistente.id },
+        data: {
+          status: 'REALIZADO',
+          valor: valorFinal,
+          dataPagamento: dtPagamento,
+          descricao: `Recebimento mensalidade - ${nomeCooperado} - ${mesRef}`,
+          observacoes: `Ref. cobrança ${cobranca.id}${metodoPagamento ? ` | Método: ${metodoPagamento}` : ''}`,
+        },
+      });
+    } else {
+      await tx.lancamentoCaixa.create({
+        data: {
+          tipo: 'RECEITA',
+          descricao: `Recebimento mensalidade - ${nomeCooperado} - ${mesRef}`,
+          valor: valorFinal,
+          competencia,
+          dataPagamento: dtPagamento,
+          status: 'REALIZADO',
+          cooperativaId: cobranca.cooperativaId || cobranca.contrato?.cooperativaId || undefined,
+          cooperadoId: cobranca.contrato?.cooperadoId || undefined,
+          observacoes: `Ref. cobrança ${cobranca.id}${metodoPagamento ? ` | Método: ${metodoPagamento}` : ''}`,
+        },
+      });
+    }
+
+    // 3) Tokens CLUBE (FATURA_CHEIA) — só se cooperado escolheu modo CLUBE
+    //    e a cobrança tem valorDesconto (o "abre mão" que vira token).
+    //    Usa creditarTx pra ficar dentro da mesma tx. Fast-path idempotente
+    //    do creditarTx via referenciaTabela='Cobranca' + unique parcial já
+    //    protege contra double-emit.
+    const cooperadoId = cobranca.contrato?.cooperadoId;
+    if (cooperadoId) {
+      const cooperadoClube = await tx.cooperado.findUnique({
+        where: { id: cooperadoId },
+        select: { modoRemuneracao: true, cooperativaId: true },
+      });
+      if (cooperadoClube?.modoRemuneracao === 'CLUBE' && cooperadoClube.cooperativaId) {
+        // Corretiva Asaas Webhook 2026-07-20 (A2 P2 revisor) — arredondar
+        // pra 4 casas antes de creditar (Decimal→Number pode dar drift float).
+        const descontoNaoAplicado =
+          Math.round(Number(cobranca.valorDesconto ?? 0) * 10000) / 10000;
+        if (descontoNaoAplicado > 0) {
+          await this.cooperTokenService.creditarTx(tx, {
+            cooperadoId,
+            cooperativaId: cooperadoClube.cooperativaId,
+            tipo: 'FATURA_CHEIA' as any,
+            quantidade: descontoNaoAplicado,
+            referenciaId: cobranca.id,
+            referenciaTabela: 'Cobranca',
+          });
+          this.logger.log(
+            `darBaixaTx: tokens CLUBE emitidos — ${descontoNaoAplicado} pra cooperado ${cooperadoId} (cobrança ${cobranca.id})`,
+          );
+        }
+      }
+    }
+
+    this.logger.log(`darBaixaTx: cobrança ${cobrancaId} PAGA — R$ ${valorFinal}`);
+    return { cobrancaId, valorFinal, cooperadoId };
+  }
+
+  /**
+   * Corretiva Asaas Webhook 2026-07-20 — chamado pelo webhook DEPOIS
+   * do commit do WebhookEvent + darBaixaTx (essenciais atômicos). Executa
+   * SÓ efeitos BEST-EFFORT (não reverte pagamento se falhar):
+   *   - Hook contábil CT.3 (fiscal, idempotente downstream via unique)
+   *   - Notificações WA/Email pro cooperado
+   *   - Evento `cobranca.primeira.paga` (MLM cascade — listener idempotente)
+   *   - Métricas Clube de Vantagens + notificações a indicadores
+   *
+   * NÃO reproduz: tokens CLUBE (já rodou no `darBaixaTx` como essencial).
+   *
+   * Cada bloco tem try/catch próprio — falha isolada não cascateia.
+   * Se algum best-effort falhar aqui, o pagamento continua confirmado
+   * (Asaas NÃO re-tenta — a idempotência do WebhookEvent já marcou).
+   */
+  async executarPosBaixaBestEffort(cobrancaId: string, valorFinal: number, dtPagamento: Date) {
+    const cobranca = await this.prisma.cobranca.findFirst({
+      where: { id: cobrancaId },
+      include: { contrato: { include: { cooperado: true } } },
+    });
+    if (!cobranca) {
+      this.logger.warn(`executarPosBaixaBestEffort: cobrança ${cobrancaId} não encontrada — skip`);
+      return;
+    }
+
+    // Hook contábil CT.3 (idempotente downstream via @@unique).
+    if (this.contabilidadeTributaria) {
+      const coopIdHook = cobranca.cooperativaId || cobranca.contrato?.cooperativaId;
+      const tipoCoopHook = cobranca.contrato?.cooperado?.tipoCooperado ?? null;
+      const convenioContabilId = (cobranca as any).convenioContabilCobrancaId as string | null;
+      const valorClube = Number((cobranca as any).valorMensalidadeClube ?? 0);
+      const valorEnergiaFiscal = Math.round((valorFinal - valorClube) * 100) / 100;
+      if (coopIdHook) {
+        const mesRefHook = `${cobranca.anoReferencia}-${String(cobranca.mesReferencia).padStart(2, '0')}`;
+        if (convenioContabilId) {
+          this.contabilidadeTributaria
+            .criarLancamentoConvenioContrato({
+              contratoConvenioId: convenioContabilId,
+              valor: valorEnergiaFiscal,
+              dataMovimento: dtPagamento,
+              competencia: mesRefHook,
+              descricao: `[CT] Consolidada custeio paga — cobrança ${cobranca.id}`,
+              cooperativaId: coopIdHook,
+            })
+            .catch((err) =>
+              this.logger.error(
+                `[CT.3 webhook] convênio ${cobranca.id} lançamento falhou: ${err.message}`,
+              ),
+            );
+        } else {
+          this.contabilidadeTributaria
+            .criarLancamentoAutomatico({
+              cooperativaId: coopIdHook,
+              origemTipo: 'COBRANCA',
+              origemId: cobranca.id,
+              fonte: { tipo: 'COBRANCA', cooperadoTipoCooperado: tipoCoopHook },
+              tipo: 'RECEITA',
+              descricao: `[CT] Cobrança paga — ${cobranca.id.slice(0, 8)}`,
+              valor: valorEnergiaFiscal,
+              competencia: mesRefHook,
+              dataPagamento: dtPagamento,
+              cooperadoId: cobranca.contrato?.cooperadoId ?? null,
+            })
+            .catch((err) =>
+              this.logger.error(
+                `[CT.3 webhook] cobrança ${cobranca.id} classificação falhou: ${err.message}`,
+              ),
+            );
+        }
+      }
+    }
+
+    // Notificações WA/Email pro cooperado.
+    try {
+      const cooperado = cobranca.contrato?.cooperado;
+      if (cooperado) {
+        const mesRef = `${String(cobranca.mesReferencia).padStart(2, '0')}/${cobranca.anoReferencia}`;
+        this.whatsappCicloVida.notificarPagamentoConfirmado(cooperado, valorFinal, mesRef).catch(() => {});
+        this.emailService.enviarConfirmacaoPagamento(cooperado, cobranca).catch(() => {});
+      }
+    } catch (err) {
+      this.logger.warn(`[webhook posBaixa] notificar falhou: ${err.message}`);
+    }
+
+    // Evento cobranca.primeira.paga (MLM cascade — listener idempotente).
+    try {
+      const cooperadoId = cobranca.contrato?.cooperadoId;
+      if (cooperadoId) {
+        const totalPagas = await this.prisma.cobranca.count({
+          where: { contrato: { cooperadoId }, status: 'PAGO' },
+        });
+        if (totalPagas === 1) {
+          this.eventEmitter.emit('cobranca.primeira.paga', {
+            cooperadoId,
+            cobrancaId,
+            valorFatura: valorFinal,
+          });
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`[webhook posBaixa] evento primeira.paga falhou: ${err.message}`);
+    }
+
+    // Métricas Clube de Vantagens + notificações a indicadores.
+    try {
+      const cooperadoId = cobranca.contrato?.cooperadoId;
+      if (cooperadoId) {
+        const indicacoes = await this.prisma.indicacao.findMany({
+          where: { cooperadoIndicadoId: cooperadoId, status: 'PRIMEIRA_FATURA_PAGA' },
+          select: { cooperadoIndicadorId: true },
+        });
+        const indicadorIds = indicacoes.map((i) => i.cooperadoIndicadorId);
+        const indicadores = indicadorIds.length > 0
+          ? await this.prisma.cooperado.findMany({
+              where: { id: { in: indicadorIds } },
+              select: { id: true, telefone: true, nomeCompleto: true, cooperativaId: true },
+            })
+          : [];
+        const indicadorMap = new Map(indicadores.map((i) => [i.id, i]));
+        const kwhEntregue = cobranca.kwhEntregue ?? 0;
+        const nomeIndicado = cobranca.contrato?.cooperado?.nomeCompleto ?? 'Indicado';
+        for (const ind of indicacoes) {
+          const resultado = await this.clubeVantagensService.atualizarMetricas(
+            ind.cooperadoIndicadorId,
+            kwhEntregue,
+            valorFinal,
+          );
+          const indicador = indicadorMap.get(ind.cooperadoIndicadorId);
+          if (indicador) {
+            this.whatsappCicloVida
+              .notificarIndicadoPagou(indicador, nomeIndicado, `R$ ${valorFinal.toFixed(2)}`)
+              .catch(() => {});
+            if (resultado?.promovido && resultado.nivelAnterior && resultado.nivelNovo) {
+              const progressao = await this.prisma.progressaoClube.findUnique({
+                where: { cooperadoId: ind.cooperadoIndicadorId },
+              });
+              this.whatsappCicloVida
+                .notificarNivelPromovido(
+                  indicador,
+                  resultado.nivelAnterior,
+                  resultado.nivelNovo,
+                  progressao?.beneficioPercentualAtual ?? 0,
+                )
+                .catch(() => {});
+            }
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`[webhook posBaixa] métricas Clube falhou: ${err.message}`);
+    }
   }
 
   async darBaixa(id: string, dataPagamento: string, valorPago: number, metodoPagamento?: string, cooperativaId?: string) {

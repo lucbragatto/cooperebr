@@ -4569,6 +4569,47 @@ enum StatusLeadConcierge {
   FALLBACK_HUMANO
 }
 
+/// Corretiva Asaas Webhook 2026-07-20 (Sessão dedicada) — fonte única
+/// de idempotência pra webhooks de provedores externos (Asaas, futuros
+/// BB/Sicoob/etc). Substitui o slot único `AsaasCobranca.ultimoWebhookEventId`
+/// (race-suscetível — 2 webhooks concorrentes com mesmo eventId ambos
+/// passam o if-check e updatam o slot). Aqui o `@@unique([provider, eventId])`
+/// materializa a idempotência via colisão P2002 do Prisma → a 2ª
+/// execução com mesmo eventId faz a `$transaction` do processarWebhook
+/// abortar cedo (INSIDE_FIRST), o webhook responde 200 idempotente sem
+/// re-aplicar efeitos essenciais.
+///
+/// Semântica de status:
+///  - PROCESSED    — efeitos essenciais commitaram atomicamente com este registro.
+///  - FAILED       — reservado (efeitos essenciais throwed; a tx fez rollback,
+///                    então este status NUNCA vai pra tabela via fluxo normal;
+///                    fica pra reprocessamento manual/futuro debug se needed).
+///
+/// Ausência do registro = evento nunca chegou OU rollback (Asaas re-tenta).
+model WebhookEvent {
+  id           String    @id @default(cuid())
+  /// Nome do provedor. Hoje: 'ASAAS'. Futuro: 'BB', 'SICOOB', 'BANESTES'...
+  provider     String
+  /// ID único do evento dentro do provedor. Pra Asaas: `${event}_${payment.id}`
+  /// (ex.: PAYMENT_RECEIVED_pay_xyz123). Composição garante que o mesmo
+  /// payment com eventos diferentes (CREATED → RECEIVED → CONFIRMED) NÃO
+  /// colide entre si.
+  eventId      String
+  /// Payload completo do webhook — rastreabilidade forense + debug.
+  payload      Json
+  /// PROCESSED (default) | FAILED (raro; ver docstring do model).
+  status       String    @default("PROCESSED")
+  /// Se FAILED, mensagem do último erro (debug).
+  ultimoErro   String?
+  /// Quando os efeitos essenciais commitaram atomicamente.
+  processadoEm DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([provider, eventId])
+  @@index([status, createdAt])
+  @@map("webhook_events")
+}
+
 // Nota sobre estados WA novos (Sprint C8):
 // ConversaWhatsapp.estado eh `String`, nao enum (vide model linha 2215).
 // Os estados novos do funil Concierge sao constantes documentadas no service

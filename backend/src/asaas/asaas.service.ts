@@ -5,12 +5,14 @@ import {
   UnauthorizedException,
   Logger,
 } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import axios, { AxiosInstance } from 'axios';
 import * as crypto from 'crypto';
 import { CredentialsEncryptor } from '../gateways-pagamento-config/credentials-encryptor.service';
+import type { CobrancasService } from '../cobrancas/cobrancas.service';
 
 @Injectable()
 export class AsaasService {
@@ -20,7 +22,32 @@ export class AsaasService {
     private prisma: PrismaService,
     private eventEmitter: EventEmitter2,
     private credentialsEncryptor: CredentialsEncryptor,
+    // Corretiva Asaas Webhook 2026-07-20 — ModuleRef pra resolver o
+    // CobrancasService LAZY (runtime), sem adicionar aresta no grafo
+    // de módulos. Evita o ciclo triangular Gateway→Asaas→Cobrancas→Gateway
+    // que forwardRef não conseguia resolver com Whatsapp/Faturas no grafo.
+    // O import de CobrancasService acima é `import type` — não gera
+    // dependência de módulo, só de tipo em compile-time.
+    private readonly moduleRef: ModuleRef,
   ) {}
+
+  /**
+   * Corretiva Asaas Webhook 2026-07-20 — resolve CobrancasService no
+   * primeiro uso e cacheia. `{ strict: false }` busca em todo o app,
+   * não só no AsaasModule.
+   */
+  private _cobrancasService: CobrancasService | null = null;
+  private getCobrancasService(): CobrancasService {
+    if (this._cobrancasService) return this._cobrancasService;
+    // Import dinâmico pra evitar circular no compile-time (import type
+    // acima já é só type-only e vira nada em runtime).
+    const { CobrancasService: CobrancasServiceClass } = require('../cobrancas/cobrancas.service');
+    this._cobrancasService = this.moduleRef.get(CobrancasServiceClass, { strict: false });
+    if (!this._cobrancasService) {
+      throw new Error('AsaasService: CobrancasService não resolvido via ModuleRef.');
+    }
+    return this._cobrancasService;
+  }
 
   // ─── Criptografia ──────────────────────────────────────────
 
@@ -494,52 +521,131 @@ export class AsaasService {
       where: { asaasId: payment.id },
     });
 
-    if (asaasCobranca) {
-      // Verificar idempotency — ignorar se já processamos este evento
-      if (asaasCobranca.ultimoWebhookEventId === eventId) {
-        this.logger.log(`Webhook duplicado ignorado: ${eventId}`);
-        return { received: true, skipped: 'duplicado' };
-      }
+    // Corretiva Asaas Webhook 2026-07-20 — fluxo INSERT-FIRST idempotente
+    // + efeitos ESSENCIAIS atômicos numa única $transaction:
+    //  1. WebhookEvent.create — P2002 no @@unique([provider, eventId]) =
+    //     duplicado → catch abaixo retorna 200 idempotente sem re-aplicar.
+    //  2. AsaasCobranca.update — mantém metadados atualizados.
+    //  3. Se PAYMENT_RECEIVED/CONFIRMED com cobrancaId associado, chamada
+    //     awaited direta pro CobrancasService.darBaixaTx (substitui o
+    //     eventEmitter.emit('pagamento.confirmado') fire-and-forget).
+    //  Erro em (2)/(3) → throw → tx rollback → WebhookEvent NÃO commita
+    //  → controller retorna 500 → Asaas re-tenta (backoff próprio dele).
+    //  Best-effort pós-commit (notif WA/email, evento MLM, hook CT.3,
+    //  métricas Clube) rodam FORA da tx via executarPosBaixaBestEffort.
+    let darBaixaResult: { cobrancaId: string; valorFinal: number } | null = null;
+    const isPaymentConfirmed =
+      (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') &&
+      asaasCobranca?.cobrancaId;
+    const dtPagamento = payment.paymentDate
+      ? new Date(payment.paymentDate)
+      : new Date();
 
-      await this.prisma.asaasCobranca.update({
-        where: { id: asaasCobranca.id },
-        data: {
-          status: newStatus,
-          linkPagamento: payment.invoiceUrl || asaasCobranca.linkPagamento,
-          boletoUrl: payment.bankSlipUrl || asaasCobranca.boletoUrl,
-          nossoNumero: payment.nossoNumero || asaasCobranca.nossoNumero,
-          ultimoWebhookEventId: eventId,
-        },
-      });
-
-      // Se pagamento confirmado/recebido, emitir evento para dar baixa na Cobranca vinculada
-      if (
-        (event === 'PAYMENT_RECEIVED' || event === 'PAYMENT_CONFIRMED') &&
-        asaasCobranca.cobrancaId
-      ) {
-        const dataPag = payment.paymentDate
-          ? new Date(payment.paymentDate).toISOString()
-          : new Date().toISOString();
-        this.eventEmitter.emit('pagamento.confirmado', {
-          cobrancaId: asaasCobranca.cobrancaId,
-          dataPagamento: dataPag,
-          valorPago: payment.value,
-          metodoPagamento: 'ASAAS',
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        // (1) Insert-first — fonte única de idempotência.
+        await tx.webhookEvent.create({
+          data: {
+            provider: 'ASAAS',
+            eventId,
+            payload,
+            status: 'PROCESSED',
+            processadoEm: new Date(),
+          },
         });
-      }
 
-      // Se vencido, atualizar Cobranca vinculada
-      if (event === 'PAYMENT_OVERDUE' && asaasCobranca.cobrancaId) {
-        try {
-          await this.prisma.cobranca.update({
+        // (2) Update AsaasCobranca dentro da tx (mesmos metadados de antes).
+        //     `ultimoWebhookEventId` continua sendo escrito pra compat com
+        //     leituras/scripts externos, mas NÃO é mais fonte de idempotência
+        //     (agora é o WebhookEvent). Vai virar débito removê-lo depois.
+        if (asaasCobranca) {
+          await tx.asaasCobranca.update({
+            where: { id: asaasCobranca.id },
+            data: {
+              status: newStatus,
+              linkPagamento: payment.invoiceUrl || asaasCobranca.linkPagamento,
+              boletoUrl: payment.bankSlipUrl || asaasCobranca.boletoUrl,
+              nossoNumero: payment.nossoNumero || asaasCobranca.nossoNumero,
+              ultimoWebhookEventId: eventId,
+            },
+          });
+        }
+
+        // (3) Essencial: dar baixa na Cobranca (síncrono, awaited, dentro
+        //     da mesma tx). Substitui fire-and-forget do eventEmitter.
+        if (isPaymentConfirmed) {
+          const r = await this.getCobrancasService().darBaixaTx(tx, {
+            cobrancaId: asaasCobranca!.cobrancaId!,
+            dataPagamento: dtPagamento,
+            valorPago: payment.value,
+            metodoPagamento: 'ASAAS',
+          });
+          darBaixaResult = { cobrancaId: r.cobrancaId, valorFinal: r.valorFinal };
+        }
+
+        // (3b) PAYMENT_OVERDUE — Corretiva 2026-07-20 (A3 P2 revisor):
+        //   update de status VENCIDO agora DENTRO da tx (antes ficava fora
+        //   pós-return 200 → falha silenciosa não re-tentava, admin via
+        //   status inconsistente e regras de multa/juros baseadas em
+        //   status='VENCIDO' quebravam). Se update falha aqui, tx aborta
+        //   → WebhookEvent NÃO commita → Asaas re-tenta.
+        if (event === 'PAYMENT_OVERDUE' && asaasCobranca?.cobrancaId) {
+          await tx.cobranca.update({
             where: { id: asaasCobranca.cobrancaId },
             data: { status: 'VENCIDO' },
           });
-        } catch {
-          // silently ignore
+        }
+      });
+    } catch (err) {
+      // Duplicado — P2002 no unique do WebhookEvent = idempotente 200.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        const target = Array.isArray(err.meta?.target)
+          ? (err.meta.target as string[])
+          : [];
+        const targetStr = typeof err.meta?.target === 'string' ? err.meta.target : '';
+        const isWebhookEventUnique =
+          (target.includes('provider') && target.includes('eventId')) ||
+          targetStr === 'webhook_events_provider_eventId_key' ||
+          targetStr === 'webhook_events_provider_eventid_key';
+        if (isWebhookEventUnique) {
+          this.logger.log(`Webhook duplicado ignorado (WebhookEvent unique): ${eventId}`);
+          return { received: true, skipped: 'duplicado' };
         }
       }
+      // Erro real em efeito essencial (darBaixaTx, LancamentoCaixa,
+      // token CLUBE, etc). Tx rollback já aconteceu — WebhookEvent NÃO
+      // ficou marcado. Propaga → controller devolve 500 → Asaas re-tenta.
+      this.logger.error(
+        `[Webhook Asaas] efeito essencial falhou — Asaas vai re-tentar: eventId=${eventId} err=${(err as Error).message}`,
+        (err as Error).stack,
+      );
+      throw err;
     }
+
+    // (4) Best-effort pós-commit (fora da tx — falha NÃO reverte pagamento).
+    //     WebhookEvent JÁ está marcado PROCESSED; Asaas NÃO re-tenta.
+    //     Se algum listener aqui falhar, log warn e segue — o pagamento
+    //     está confirmado do ponto de vista financeiro.
+    if (darBaixaResult) {
+      const r = darBaixaResult as { cobrancaId: string; valorFinal: number };
+      this.getCobrancasService()
+        .executarPosBaixaBestEffort(r.cobrancaId, r.valorFinal, dtPagamento)
+        .catch((posErr) =>
+          this.logger.warn(
+            `[Webhook Asaas] pós-baixa best-effort falhou (não reverte pagamento): ${(posErr as Error).message}`,
+          ),
+        );
+    }
+
+    // (5) PAYMENT_OVERDUE — movido pra DENTRO da tx principal (bloco 3b acima).
+    //     Corretiva 2026-07-20 A3 P2 (revisor financeiro): antes rodava
+    //     aqui FORA da tx com try/catch swallow → falha silenciosa não
+    //     re-tentava, cobrança ficava sem status='VENCIDO', regras de
+    //     multa/juros baseadas em status quebravam. Agora atômico com
+    //     WebhookEvent — se update falha, tx rollback → 500 → Asaas retry.
 
     // Sprint Clube P1 — Fase 2 Bloco 3 (11/06/2026): roteamento de webhook pra
     // CooperTokenCompra. Emite evento sem dependencia direta de CooperToken
