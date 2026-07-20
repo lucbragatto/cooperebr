@@ -1793,6 +1793,15 @@ model ContratoConvenio {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Sprint máscara de e-mail por convênio (feature/mascara-email-convenio,
+  // pausada mas viva — piloto Santi ATIVO no tenant CoopereBR principal).
+  // Re-adicionado ao main:schema em 2026-07-20 pra RESOLVER O DRIFT com
+  // o banco (coluna + índice UNIQUE já existem lá; adição aqui é
+  // comportamento-zero, só sela schema↔banco). Byte-a-byte igual ao
+  // branch `feature/mascara-email-convenio:schema.prisma:1808`.
+  // Formato: ^[a-z0-9-]{2,30}$. Nullable — a maioria dos convênios NÃO tem campanha.
+  emailAliasCampanha String? @unique
+
   // Relações
   cooperados      ConvenioCooperado[]
   lancamentos     LancamentoCaixa[]
