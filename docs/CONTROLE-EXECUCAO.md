@@ -1,7 +1,9 @@
 # Controle de Execução — SISGD
 
 > Arquivo vivo. Atualizar em **toda sessão** (claude.ai e Code).
-> Última atualização: **2026-07-16 (Code) — Corretiva SEG Mensageria WhatsApp 5/7 achados FECHADOS, ZERO push (aguardando revisão Luciano)**. Achados 2, 1, 5, 6, 7 fechados em 6 commits locais (`d5003f4..43fe3f8`) + 1 commit de débito reclassificado (`17501eb`). Achados 3 e 4 pendentes pra próxima sessão. Padrão de correção: classificação NA ORIGEM (não regex), teste do PAR com canal ATIVO via env mockada, prova por mutação obrigatória antes de aprovar. Higiene histórica aplicada: 14 OTPs em claro redigidos no tenant CoopereBR PRINCIPAL (`cmn0ho8b...`, 307 cooperados), todos smoke/canário expirados, metadados 100% preservados. Contagens preventivas: A6 = 263 inbound / 0 PIN residente; A7 = 43 conversas / 0 PIN residente. NENHUM cooperado exposto. 2 débitos novos catalogados (P2 CICLO-BILATERAL + P3 SUPORTE-CORPO-EM-LOG); 1 débito reclassificado (P2 HISTORICO-OVERFETCH RESOLVIDO no A7). Lição de método: os 3 achados mais graves (5, 6, 7) vieram de perguntar "onde mais esse dado vai parar?" após cada correção — não da auditoria original. Regra derivada: todo achado de vazamento aciona varredura de propagação. 34 suites Jest verdes (741 testes) + tsc exit 0. Regra contatos de teste 100% respeitada. Detalhe: `docs/sessoes/2026-07-16-corretiva-seguranca-mensageria-wa.md`.
+> Última atualização: **2026-07-20 (Code) — Corretiva Mensageria WA finalizada (9 achados) + Asaas Webhook FASE 2 fechada + 3 blocos laterais. 18 commits PUSHADOS (`57e0285..71bc6e5`)**. Mensageria: Achados 3 (webhook secret query→header) + 4 (ACL `auth_info`) implementados; Achados 8 (Codex ACL no repo INTEIRO — não só auth_info) + 9 (drift `COOPERTOKEN_QR_SECRET` triplicado) descobertos e catalogados. Runbook `docs/seguranca/restart-coordenado-achado-3-4-8.md` com provas de identidade (webhook igualdade + QR round-trip). **Manutenção destrutiva PENDENTE — Luciano roda.** Asaas Fase 2 (6 commits `53e1065..71bc6e5`): idempotência via `WebhookEvent` + darBaixaTx sync + creditarTx tx-aware + ModuleRef lazy (não forwardRef — evitou ciclo triangular Gateway↔Asaas↔Cobrancas). **Idempotência+rollback PROVADOS end-to-end** (smoke live + integration test permanente). Débito P1 A6 RESOLVIDO. 3 fixes revisor aplicados (A1/A2/A3). Blocos laterais: higiene raiz (16 arquivos), wa-service loopback+secret (fecha vetor LAN), regressão frontend proxy /whatsapp/status, drift `emailAliasCampanha` resolvido casando schema com banco (piloto Santi Medicina preservado, `migrate dev` BARRADO — teria resetado banco de prod). 6 débitos novos catalogados (WEBHOOK-PJ-SLOT-UNICO, CT3-CRON-RECONCILIACAO, CT-MLM-ATOMICO, MIGRATIONS-ABANDONADAS, ASAAS-FINDFIRST-FORA-TX, CT-QR-DIRIGIDO-A2); 2 resolvidos (A6, drift). **Lição de método**: varredura de propagação achou Achados 8+9 (mais graves) DEPOIS da auditoria original; "olhar antes de executar" barrou 2 comandos destrutivos (drop coluna Santi ativa + `migrate dev` que teria proposto reset). 421/421 specs verdes cooper-token + 471/471 asaas/cobrancas/cooper-token pós-Asaas Fase 2. Regra contatos de teste 100% respeitada. Detalhe: `docs/sessoes/2026-07-20-corretiva-mensageria-e-asaas-fase2.md`.
+>
+> Histórico: **2026-07-16 (Code) — Corretiva SEG Mensageria WhatsApp 5/7 achados FECHADOS**. Achados 2, 1, 5, 6, 7 fechados em 6 commits locais + 1 commit de débito reclassificado. Higiene histórica aplicada: 14 OTPs em claro redigidos no tenant CoopereBR PRINCIPAL. Lição de método originada: os 3 achados mais graves (5, 6, 7) vieram de perguntar "onde mais esse dado vai parar?" — não da auditoria original. Regra derivada: todo achado de vazamento aciona varredura de propagação. Detalhe: `docs/sessoes/2026-07-16-corretiva-seguranca-mensageria-wa.md`.
 >
 > Histórico anterior: **2026-06-22 (Code) — M48 Sprint Funil Camada 1 MOTOR FECHADO**. Camada 1 do Funil de Aquisição (motor backend). **PASSIVO/ADVISORY only**: decide caminho + grava metadata em 4 campos do Cooperado. NÃO bloqueia, NÃO redireciona, NÃO dispara migração. Enforcement vem nas Camadas 2/3 (vitrines parceiro + SISGD marketplace). Schema delta aditivo: `AliasParceiroSisgd` (tenant-aware, 6 seeds CoopereBR) + `Cooperado.roteamento*` 4 campos + `FaturaProcessada.classificacaoScee` (hook deferido). Matcher: CNPJ direto com validação DV oficial Receita Federal (H2 — evita telefone como CNPJ) + alias ILIKE substring nos 2 sentidos. Cross-tenant lookup intencional documentado — retorno opaco (só tenantAlvo+razao). `LeadExpansao.converter()` fecha gap M47 com typed errors. 23 specs Jest + smoke E2E REAL 3/3 PASS (motor silencioso — D-novo-WA-DEV-FALSE-OK não se aplica). Reviewers multitenant + code-reviewer + re-review orquestrador APROVADOS COM RESSALVAS (2 HIGH + 3 P2 + 2 M + 2 L fixes pré-merge). Commits: `26201d8` (feat) + `e9db14b` (merge --no-ff). Feature branch `feature/funil-roteador-engine` PRESERVADA. **CONVÊNIO COOPERATIVIZADO COMPLETO** (M44 + M46 + M47 + M48). Próximo: **Sprint FAMÍLIA (Fase 2 G1+G4) com conversibilidade de token CONFIGURÁVEL** (abate-fatura não-conversível default + saque gated reusa D2/M41). DEPENDE spec orquestrador. **Camadas 2/3 do Funil (vitrines) BLOQUEADAS pelo Hardening Lateral** (4 P1 M45 + 2 P2 M46 + 2 P2 M47 + 1 P1 M48 LEAD-EXPANSAO-PUBLIC-TENANT-SPOOF — 3ª ocorrência mesmo spoof M45 — pré-requisito obrigatório de exposição pública). Detalhe: `docs/sessoes/2026-06-22-m48-sprint-funil-camada-1-motor.md`.
 
@@ -74,6 +76,62 @@
 > Histórico: **2026-05-29 noite — Sub-Sprint BH FECHAMENTO PARCIAL (`c0542fc`, obsoleto)** — substituído pelo fechamento completo de 30/05.
 
 > Histórico: **2026-05-26 noite — M31 Sub-Sprint F Sessão 2 (F.3 Onboarding magic link + cadastro manual)**. 5 commits incrementais (`34719bd` Etapa A ConviteProprietarioService + 31 specs → `6a845f1` Etapas B+C+D endpoints admin + público + email template → `2eb822b` Etapa E frontend admin Card "Acesso do Proprietário" com 2 dialogs Shadcn → `3ba6655` Etapa F frontend público /proprietario/aceitar-convite/[token] com indicador força senha → commit fechamento). **Backend completo + Frontend admin + Frontend público funcionando.** 2 caminhos coexistem: cadastro manual (admin cria Usuario direto, copia senhaTemp pra clipboard) + magic link (admin envia email, proprietário define própria senha). Token crypto.randomBytes 64 hex TTL 7d single-use. Multi-tenant em 100% queries. LGPD: token nunca retornado integral em listagem (tokenSufixo). Senha forte 8+ chars + letra + número. Email template inline (sem Handlebars) reusa EmailService.enviarEmail tenant-aware + whitelist dev. **Suite completa: 917/928 passing** (+31 specs M31 vs M30). nest build + tsc limpos. **F.4 PENDE Luciano operacional**: preencher cooperebr1 (proprietarioEmail GATILHO + formaPagamentoDono + valor + matriz responsabilidade + statusOperacional + valorKwhPadrao OU TarifaConcessionaria EDP_ES) + cadastrar Usuario E-Solares via UI admin OU magic link. Quando feito, F.4 vira sessão curta ~1-2h. Detalhe: `docs/sessoes/2026-05-26-m31-sub-sprint-f-onboarding-magic-link.md`.
+
+---
+
+## ONDE PARAMOS — 2026-07-20 (Code — Corretiva Mensageria WA finalizada 9/9 + Asaas Webhook FASE 2 fechada + 3 blocos laterais — 18 commits PUSHADOS)
+
+**Arco:** 4 dias (2026-07-16 pós-fechamento anterior → 2026-07-20). **18 commits em `main`** todos pushados (`57e0285..71bc6e5`).
+
+### Corretiva Mensageria WhatsApp — finalizada (9 achados totais, não 5-7)
+
+Fechamento anterior fechou 5 achados (1, 2, 5, 6, 7). Esta sessão finalizou os outros **4**:
+
+- **Achado 3** (`57e0285` + `cb7e7a4`) — webhook secret query→header. Receptor com fallback query+warn (janela de compat); emissor com defense-in-depth `limparSecretDaUrl` no boot. Spec 5 cenários + mutação demonstrada. Estrutura de 2 commits (receptor+spec / emissor+scripts).
+- **Achado 4** (`a3dac52`) — README `whatsapp-service/README.md` "a pasta É a credencial" + runbook `docs/seguranca/restart-coordenado-achado-3-4.md`. **Comando `icacls` destrutivo pendente — Luciano roda.**
+- **Achado 8 (NOVO)** (`197f60c`) — descoberto na varredura ACL da Fase 1 do A4. `CodexSandboxUsers` (contas `CodexSandboxOffline` + `CodexSandboxOnline`) + SID órfão têm **Modify+Delete Children APLICADO EXPLICITAMENTE em `C:\Users\Luciano\cooperebr`** — herdado por TODO o repo (`.env`, `.git`, `auth_info`, código). NÃO é só leitura — é escrita cross-repo. Luciano confirmou: não usa Codex neste repo → grant é resíduo. Runbook renomeado pra `restart-coordenado-achado-3-4-8.md` com ordem canônica 8→4→3.
+- **Achado 9 (NOVO)** (`69a349d`) — triagem read-only pós-Asaas mostrou `COOPERTOKEN_QR_SECRET` triplicado em `backend/.env` com 3 valores DIFERENTES (48/0/44 chars). Auditoria: `.env` last-modified 2026-06-08 + simulação `dotenv.config()` no CWD backend = length 44 (linha 76 ativa). Consolidação passiva (apagar 73 + 75, manter 76) = comportamento-zero. **Encaixado no Bloco 3.1b do runbook.** Pendente.
+
+Runbook consolidado (`7fffb62` + `1f5fe01`): smoke funcional pós-restart em 4 sub-testes obrigatórios — WA-service `/status` + webhook 401/200 + **igualdade dos 2 `.env`** + **round-trip real com `27981341348`** + **QR round-trip funcional**.
+
+Nota empírica registrada: `pm2 env <id>` NÃO expõe vars dotenv-loaded (comprovado com WHATSAPP e COOPERTOKEN_QR secrets).
+
+### Corretiva Asaas Webhook FASE 2 (6 commits `53e1065..71bc6e5`)
+
+Fecha 4 bugs financeiros: perda silenciosa pós-confirmação (fire-and-forget → sync awaited), dedup slot-único não-atômico → `WebhookEvent @@unique([provider, eventId])`, PAYMENT_OVERDUE silencioso → dentro da tx, efeitos essenciais fora da atomicidade → `darBaixaTx` + `creditarTx` tx-aware.
+
+- **Refactor Opção C**: `darBaixaTx` (essenciais atômicos: Cobranca PAGO com CAS, LancamentoCaixa PREVISTO→REALIZADO, tokens CLUBE via `creditarTx`) + `executarPosBaixaBestEffort` (hook CT.3, notif WA/email, evento MLM cascade, métricas Clube) + `creditarTx` (CORE do creditar sem $tx própria). Originais `darBaixa`/`creditar` INTOCADOS.
+- **`ModuleRef` lazy** (não `forwardRef`): forwardRef fechou ciclo triangular Gateway↔Asaas↔Cobrancas com Whatsapp/Faturas/CooperToken no grafo — quebrou Nest. Solução: `moduleRef.get({strict:false})` LAZY + cache privado. Zero aresta nova no grafo.
+- **Revisor `cooperebr-financeiro-token-reviewer`**: 7 achados. **3 aplicados**: A1 P1 (arredondamento `valorPago` JSON externo), A2 P2 (arredondamento token 4 casas em novoValor), A3 P2 (PAYMENT_OVERDUE dentro da tx). 4 catalogados.
+- **A6 elevado a P1 pré-push pelo próprio Luciano**: "idempotência com Prisma mockado é design, não prova". Cumprido no fim da sessão em 2 metades:
+  - **METADE 1 LIVE**: script one-off criou cadeia completa via Prisma direto + POST mesmo eventId 2× no backend rodando → `{received:true}` (200) + `{received:true, skipped:'duplicado'}` (200). SELECTs: `webhook_events`=1, `cobranca.status=PAGO valorPago=100`, `cooper_token_ledger`=1 crédito 19.6 tokens, `saldo=19.6`. Notif whitelistada: WA foi pro Luciano (27981341348), email SKIPPED (alias `+smoke` não canônica). Zero risco pra cooperado real.
+  - **METADE 2 INTEGRATION** (spec permanente `backend/src/asaas/asaas-webhook-rollback.integration.spec.ts`): 2 testes contra banco real. Teste 1: mock `darBaixaTx` throw → 7 asserts (throw propagou, `executarPosBaixaBestEffort` NÃO alcançado, `webhook_events`=0, Cobranca PENDENTE, AsaasCobranca PENDING, ledger=0). Teste 2: re-entrega pós-rollback completa (prova estado limpo). **Regression guard permanente.**
+
+### Blocos laterais
+
+- **Higiene raiz** (`2297856`) — 9 backend*.log + 6 tmp_*.json + check-leads.mjs deletados. `.gitignore` ganhou `logs/` explícito + `tmp_*.json`.
+- **wa-service loopback + secret nos /send-*** (`d5e547c`) — vetor "qualquer host na LAN dispara WhatsApp em nome da coop" fechado. Bind `127.0.0.1` + middleware secret + CORS removido. Backend `authHeaders()` injeta `x-whatsapp-secret` em 4 fetch.
+- **Regressão frontend** (`951f455`) — `page.tsx` migrou GET/POST direto `:3002/status` e `/reconnect` do browser pra `api.get('/whatsapp/status')` + `api.post('/whatsapp/reconnect')`. Backend ganhou `POST /whatsapp/reconnect` (proxy via `sender.reconnect()`).
+- **CooperToken FASE 2** (`472f6d7`) — unique parcial SQL raw manual (`cooper_token_ledger_ref_origem_uniq`), `debitar` Serializable + retry 40001 + `referenciaTabela`, QR `jti` no JWT anti-replay. 421/421 specs. Revisor rodado, 4 fixes aplicados (A.2 catalogado).
+- **Drift `emailAliasCampanha`** (`23df61a` + `c186fc0` + `a2cc4e0`) — 3 iterações. 1ª: recomendação "drop coluna morta" REVERTIDA (campo é da sprint viva `feature/mascara-email-convenio`, piloto Santi ATIVO). 2ª: recomendação `migrate dev` BARRADA pelo Luciano (teria proposto RESET do banco de prod — pasta `migrations/` congelada há meses, banco drifou). 3ª: adicionado `emailAliasCampanha String? @unique` byte-a-byte igual ao branch → `db push` idempotente `"already in sync"`. Zero data-loss.
+
+### Débitos técnicos
+
+**Resolvidos**: A6 (smoke provado end-to-end), drift `emailAliasCampanha` (schema=banco).
+
+**Novos catalogados** (P2 salvo D-novo-ASAAS-FINDFIRST-FORA-TX que é P3):
+- `D-novo-CT-QR-DIRIGIDO-A2` — QR mesmo-tenant sem `recebedorId` no payload
+- `D-novo-WEBHOOK-PJ-SLOT-UNICO` — listener PJ não migrou pro WebhookEvent
+- `D-novo-CT3-CRON-RECONCILIACAO` — hook CT.3 fiscal sem cron reconciliador
+- `D-novo-CT-MLM-ATOMICO` — `processarPrimeiraFaturaPaga` não atômico
+- `D-novo-MIGRATIONS-ABANDONADAS` — pasta congelada, reconciliação sessão dedicada
+
+### Lição de método (registrar, não é anedota)
+
+- **Varredura de propagação** achou os 2 achados mais graves desta sessão (8+9) DEPOIS da auditoria original — mesmo padrão dos achados 5/6/7 da sessão anterior. Regra derivada reforçada: todo achado aciona varredura de propagação.
+- **"Olhar antes de executar" barrou 2 comandos destrutivos**: drop coluna Santi ativa + `migrate dev` que teria proposto reset banco. Padrão: recomendações plausíveis mas destrutivas passam despercebidas em Fase 1 read-only se não cruzar 3 fontes — auditoria do dado + branches vivas + política CLAUDE.md.
+
+Detalhe: `docs/sessoes/2026-07-20-corretiva-mensageria-e-asaas-fase2.md`.
 
 ---
 
@@ -4026,74 +4084,128 @@ Cola direto no Claude Code (VS Code) quando voltar:
 PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
 
 1. Confirmar que esta é NOVA conversa Code (não continuação de janela
-   anterior). Verificar que subagent `cooperebr-qa-funcional` aparece
-   na lista de agents. Se não aparecer, parar e avisar.
+   anterior). Verificar que subagents `cooperebr-financeiro-token-reviewer`
+   + `cooperebr-multitenant-reviewer` aparecem na lista de agents.
+   Se não aparecerem, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento 14/07:
+2. Rodar `git status --short`. Esperado pós-fechamento 20/07:
    working tree limpo (exceto carry-over conhecido: `.agent/`,
    `.claude/agents/*` não-meus, `.e2e-tmp/`, scripts experimentais
    `backend/scripts/__*`/`test-*.mjs`, `ponte-wa-telegram-leve/`,
    sobra `backend/node_modules/.prisma/client/query_engine-windows.dll.node.old`
    do troubleshooting Prisma) — NUNCA `git add .` / `-A`. Último commit em main
-   deve ser `docs(sessao): fechamento M53 — ...`. `git log origin/main..HEAD
+   deve ser `docs(sessao): fechamento 20/07 — ...`. `git log origin/main..HEAD
    --oneline` deve estar VAZIO.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
-   + cooperebr-whatsapp online. Schema delta 01/07 (enum
-   `CanalCadastro` + `Cooperado.canalCadastro` nullable) JÁ APLICADO
-   no banco dev via `prisma db push`. **Schema delta 14/07 (Sprint
-   Máscara — `emailAliasCampanha` + `FaturaCampanhaConvenio` + enum
-   `StatusFaturaCampanha`) TAMBÉM aplicado no banco dev, MAS o código
-   na main NÃO conhece esses campos** (Sprint Máscara vive na branch
-   `feature/mascara-email-convenio`; ver PASSO 1). Runtime da main
-   ignora os campos novos e roda normalmente. NÃO rodar `prisma db push`
-   de novo a menos que a próxima sprint tenha delta novo.
+   + cooperebr-whatsapp online. Schemas aplicados no banco dev/prod-lite:
+   - `WebhookEvent` (Corretiva Asaas Fase 2 20/07 — SQL raw one-off,
+     não migration formal; documentado como D-novo-MIGRATIONS-ABANDONADAS)
+   - `emailAliasCampanha String? @unique` em ContratoConvenio (drift
+     resolvido 20/07 casando com banco — piloto Santi ATIVO preservado)
+   - Índice parcial `cooper_token_ledger_ref_origem_uniq` (CooperToken Fase 2
+     20/07 — SQL raw one-off, unique parcial Prisma não expressa)
+   NÃO rodar `prisma db push` nem `migrate dev` sem sprint com delta novo.
+   Se aparecer prompt de data-loss, PARA — regra CLAUDE.md inegociável.
 
-PASSO 1 — Frase COMANDANTE:
+PASSO 1 — Frase COMANDANTE (escolha do Luciano entre 2 rotas):
 
-🟢 **14/07/2026 — FIX texto convite na main + Sprint Máscara PRESERVADA em branch.**
+🟢 **20/07/2026 — Corretiva Mensageria WA finalizada 9/9 + Asaas Webhook FASE 2
+provada end-to-end + 3 blocos laterais.** 18 commits pushados
+(`57e0285..71bc6e5`). Detalhe consolidado:
+`docs/sessoes/2026-07-20-corretiva-mensageria-e-asaas-fase2.md`.
 
-Sessão entregou 2 blocos INDEPENDENTES:
+Ambas as ROTAS abaixo são INDEPENDENTES — escolha por prioridade + energia:
 
-**FIX texto convite** (`71b4202` na main, PUSHED, NÃO RE-APLICAR): texto novo aprovado
-05/07 em `wa-me-builder.ts` branch CONVENIO_EMPRESA (quem ganha é você / Clube de
-Vantagens / 100% / fatura último mês / expira em 7 dias) + `enviarLinkPorWhatsapp`
-refatorado pra CHAMAR `montarMensagemConvite` (helper puro agora é fonte única). Suite
-`src/convenios/lib/wa-me-builder` + `src/convenios/convites-convenio` 97/97 verde. Fix
-carona: double-decode `URI malformed` no spec (URLSearchParams já decoda + '%25' de
-`100%` explodia no `decodeURIComponent` extra).
+═══ ROTA A — Tarefa 4 (Asaas emissão idempotência + retry unificado) — CÓDIGO ═══
 
-**Sprint Máscara de e-mail por convênio Blocos A-E + G** (`7745082` em
-`origin/feature/mascara-email-convenio`, PRESERVADA, **NÃO NA MAIN**): pipeline
-completo pra captação de faturas de funcionários de campanha empresarial via alias
-Gmail `<localMailbox>+<sufixo>@<domain>` — genérico multi-tenant (Acréscimo A:
-local-part vem do `email.monitor.user` do tenant, NÃO hardcoda 'contato'),
-pré-cadastro (não auto-cria Cooperado; humano vincula depois). 16 arquivos: schema
-(`ContratoConvenio.emailAliasCampanha` + `FaturaCampanhaConvenio` + enum
-`StatusFaturaCampanha`), helpers puros (`matchAliasCampanha` + `sanitizarTextoOcr` +
-`sanitizarNumeroUc`), `FaturasCampanhaService` (guard 15MB + dedupe semântica + anexo
-`uploads/campanha/<convenioId>/<hash>.pdf`), integração email-monitor (exclusão mútua
-— bateu alias → ramo campanha, senão fluxo antigo intacto), endpoints admin (GET
-`/convenios/:id/faturas-campanha` + PATCH status) com AuditLog, UI
-`CampanhaFaturasSection` (banner help + input alias + contadores + tabela). 31 specs
-novos + 2 caronas fechadas — suite `src/convenios/`+`src/email-monitor/`+`src/publico/`+
-`src/lead-expansao/`+`src/cooperados/` **554/554 verdes**. Piloto **CV-SANTI-001
-`emailAliasCampanha='santi'`** seedeado no banco dev (Bloco G — smoke real inbound com
-`contato+santi@cooperebr.com.br` pronto pra rodar quando merge acontecer).
+Sessão dedicada tipo "Fase 1 read-only → aprovação do desenho → Fase 2 execução
+→ revisor obrigatório". Cobre 3 defeitos financeiros ativos:
 
-**Pausa aplicada por instrução expressa do Luciano** após o commit — `git reset --hard
-71b4202` + `git push origin main --force-with-lease` desfez o merge; branch
-`feature/mascara-email-convenio` preservou o trabalho pra retomada futura. Backend +
-frontend rebuildaram a partir da main revertida e voltaram online no estado mergeado
-oficial.
+1. `cobrancas.service.ts:362-376` + `:887-890` engolem exceção da emissão do
+   Asaas 2× com logger.warn e retornam cobrança "normal" → cobrança fica SEM
+   boleto/PIX + cooperado é notificado mesmo assim + NADA reprocessa. Retry
+   por statusEmissao=AGUARDANDO_EMISSAO só existe no caminho de convênio
+   (`convenios.job.ts`); regular não seta.
 
-**Ao retomar Sprint Máscara** (opção A do próximo passo):
-```
-git fetch origin
-git checkout feature/mascara-email-convenio
-# rodar Bloco F: cooperebr-multitenant-reviewer + code-reviewer
-# aguardar re-review do orquestrador (git + código lido + suites ao vivo)
-# se OK: merge --no-ff pra main + push + smoke real INBOUND com contato+santi@
+2. `AsaasService.emitirCobranca` (`asaas.service.ts:260`) faz POST `/payments`
+   SEM externalReference + SEM idempotency key + AsaasCobranca sem
+   `@@unique(cobrancaId)`/`@@unique(asaasId)` → double-click/retry = cobrança
+   DUPLA REAL no gateway. **Auditoria já confirmou 0 duplicatas hoje** —
+   fix-forward puro, sem reparo de dado nesta sessão.
+
+3. POST e `asaasCobranca.create` são sequenciais não-transacionais (`:260`
+   depois `:269`) → se POST OK mas create local falha, vira cobrança órfã
+   que o webhook nunca reconcilia (findFirst por asaasId não acha).
+
+Fix aprovado da Fase 1 (documento futuro):
+- `externalReference = cobrancaId` no POST + `@@unique` em
+  `AsaasCobranca(cobrancaId)`. Look-before-emit → retorna existente se já
+  postou (idempotente).
+- Unificar retry: no caminho REGULAR, ao falhar setar
+  `statusEmissao=AGUARDANDO_EMISSAO` + `ultimoErroEmissao`, e estender cron
+  de retry (padrão convênio, tentativas<5, backoff 30min) pra varrer TAMBÉM
+  as regulares. **NÃO notificar o cooperado (email/WA) enquanto não houver
+  instrumento de pagamento emitido.**
+- Reconciliação de órfã: se POST der certo mas create local falhar, capturar
+  asaasId retornado e persistir mesmo em caminho de erro (ou reconciliar via
+  externalReference). Logar em ERRO, não warn.
+
+Guardrails: schema change (@@unique + possível statusEmissao no caminho
+regular) → ritual db push com PM2 parado. Rebuild backend. Multi-tenant
+cooperativaId do JWT. Contatos-teste 27981341348 / lucbragatto+suffix@gmail.com.
+Rodar `cooperebr-financeiro-token-reviewer` E `cooperebr-multitenant-reviewer`
+no fim. SEM push sem OK explícito.
+
+═══ ROTA B — Manutenção destrutiva Mensageria WA (LUCIANO ROD, não Code) ═══
+
+Runbook: `docs/seguranca/restart-coordenado-achado-3-4-8.md`. Ordem 8→4→3:
+
+- Bloco 8 (Codex ACL removido do repo): `icacls /remove:g "DESKTOP-89HGOKR\CodexSandboxUsers"`
+  + `/remove:g "*S-1-5-21-3982730439-717413640-2430296156-1805928900"` em
+  `C:\Users\Luciano\cooperebr` com `/T`. Backup ACL antes. Verificação: ACL sem
+  esses dois principals no root E no auth_info (herança propagou).
+- Bloco 4 (tighten auth_info): `pm2 stop cooperebr-whatsapp` → `icacls
+  /inheritance:r /grant:r "Luciano:(OI)(CI)(F)" "SYSTEM:..." "Administradores:..."`
+  no auth_info /T (atômico).
+- Bloco 3 (rotação secret + consolidação Achado 9): gerar novo
+  `WHATSAPP_WEBHOOK_SECRET` (RandomNumberGenerator PowerShell, clipboard-only,
+  NÃO colar valor em report) → editar OS DOIS `.env` (backend + wa-service) →
+  limpar `?secret=` do `BACKEND_WEBHOOK_URL` → consolidar `COOPERTOKEN_QR_SECRET`
+  (Achado 9: apagar linhas 73 + 75 do backend/.env, manter 76) → rebuild backend
+  → `pm2 restart cooperebr-whatsapp` (Baileys reconecta sem QR novo).
+- Bloco 5 (smoke pós-restart, obrigatório): WA-service `/status connected` +
+  webhook 401/200 + warn ausente + **igualdade dos 2 `.env`** (comparação
+  estrutural sem ecoar valor) + **round-trip real com 27981341348** (envia
+  mensagem, grep log `"Mensagem recebida"`) + **QR round-trip funcional**
+  (login → POST /cooper-token/gerar-qr-pagamento → `node -e jwt.verify` contra
+  .env — se validar, runtime==env).
+- Bloco 6 (monitor pós-24h): grep `pm2 logs cooperebr-backend` por
+  `"WA-WEBHOOK.*deprecated"` — se zero, agendar cleanup do fallback query no
+  receptor (retirar suporte query + warn).
+
+═══ COMO ESCOLHER ═══
+
+- Se a rota é **CÓDIGO** (você tem energia pra sessão de código financeiro,
+  4-8h com revisor) → **ROTA A** (Tarefa 4).
+- Se a rota é **MANUTENÇÃO OPERACIONAL** (você tem janela pra rodar
+  comandos destrutivos com atenção total, 30-45min) → **ROTA B**
+  (mensageria pendente).
+- Se quer o menor risco financeiro-atual primeiro: **ROTA A** (bug de
+  emissão dupla é ativo, mesmo que 0 casos hoje — próxima geração de
+  cobranças pode duplicar; auditoria comprovou fix-forward puro).
+- Se quer fechar a superfície de exposição primeiro: **ROTA B**
+  (Codex sandbox tem write no repo desde data indeterminada — sem
+  evidência de exploração mas risco potencial).
+
+**Débitos abertos pra sessões dedicadas futuras** (P2, não bloqueiam
+nenhuma das rotas acima): `D-novo-CT-MLM-ATOMICO` (indicacoes atômico +
+cron reconciliação), `D-novo-WEBHOOK-PJ-SLOT-UNICO` (migrar listener
+compra-PJ pro WebhookEvent), `D-novo-CT3-CRON-RECONCILIACAO` (cron
+Cobranca-PAGO-sem-LancamentoContabil), `D-novo-MIGRATIONS-ABANDONADAS`
+(reconciliar `backend/prisma/migrations/` — JAMAIS `migrate dev` casual),
+Tarefas 6/7/8 (email OCR move seletivo, sender WA/email status inspection,
+fatura OCR schema zod).
 ```
 
 **Frente 2 — Vitrines Mínimas + Pipeline de Captação** (manhã+tarde, 7 commits):
