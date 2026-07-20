@@ -145,7 +145,8 @@ describe('F1.5 G2 — descricoes do ledger sem strings hardcoded', () => {
 
     it('descricao do recebimento QR contem o valor real (fallback 1) — NUNCA "taxa 1%"', async () => {
       const qrToken = jwt.sign(
-        { pagadorId: 'pagador', cooperativaId: 'coop-A', quantidade: 100, tipo: 'COOPER_TOKEN_QR' },
+        // Corretiva CooperToken 2026-07-20 — jti obrigatório.
+        { pagadorId: 'pagador', cooperativaId: 'coop-A', quantidade: 100, tipo: 'COOPER_TOKEN_QR', jti: 'jti-f15-100' },
         SECRET,
       );
       await service.processarPagamentoQr({
@@ -170,7 +171,8 @@ describe('F1.5 G2 — descricoes do ledger sem strings hardcoded', () => {
         meltAtivado: true, // M52b F1: gate ON pra exercitar cobrança da taxa
       });
       const qrToken = jwt.sign(
-        { pagadorId: 'pagador', cooperativaId: 'coop-A', quantidade: 200, tipo: 'COOPER_TOKEN_QR' },
+        // Corretiva CooperToken 2026-07-20 — jti obrigatório.
+        { pagadorId: 'pagador', cooperativaId: 'coop-A', quantidade: 200, tipo: 'COOPER_TOKEN_QR', jti: 'jti-f15-200' },
         SECRET,
       );
       await service.processarPagamentoQr({

@@ -780,6 +780,11 @@ export class ClubeVantagensService {
         quantidade: tokensNecessarios,
         tipo: 'FLEX' as any,
         referenciaId: ofertaId,
+        // Corretiva CooperToken 2026-07-20 — participa do unique parcial
+        // cooper_token_ledger_ref_origem_uniq (OfertaClube+ofertaId+DEBITO).
+        // Nome canônico do model no schema.prisma:3466 (@@map "ofertas_clube").
+        // Sem isso, double-click/retry no resgate = tokens debitados 2x.
+        referenciaTabela: 'OfertaClube',
         descricao: `Resgate Clube: ${oferta.titulo}`,
       });
 

@@ -118,6 +118,8 @@ const gerarQrToken = (quantidade, cooperativaId = 'coop-A') =>
       cooperativaId,
       quantidade,
       tipo: 'COOPER_TOKEN_QR',
+      // Corretiva CooperToken 2026-07-20 — jti obrigatório (anti-replay).
+      jti: 'jti-conf-' + Math.random().toString(36).slice(2),
     },
     SECRET,
   );

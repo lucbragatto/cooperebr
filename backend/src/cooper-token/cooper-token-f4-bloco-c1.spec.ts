@@ -27,7 +27,14 @@ const SECRET = 'F4-bloco-C1-secret-com-mais-de-32-caracteres-aqui-test';
 
 function gerarQrToken(quantidade: number, cooperativaId = 'coop-A') {
   return jwt.sign(
-    { pagadorId: 'pagador-1', cooperativaId, quantidade, tipo: 'COOPER_TOKEN_QR' },
+    // Corretiva CooperToken 2026-07-20 — jti obrigatório no payload.
+    {
+      pagadorId: 'pagador-1',
+      cooperativaId,
+      quantidade,
+      tipo: 'COOPER_TOKEN_QR',
+      jti: 'jti-f4c1-' + Math.random().toString(36).slice(2),
+    },
     SECRET,
   );
 }

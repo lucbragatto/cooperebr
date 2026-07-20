@@ -327,6 +327,10 @@ export class CobrancasService {
               quantidade: desconto.tokensNecessarios,
               tipo: CooperTokenTipo.DESCONTO_FATURA,
               referenciaId: cobranca.id,
+              // Corretiva CooperToken 2026-07-20 — participa do unique parcial
+              // cooper_token_ledger_ref_origem_uniq (Cobranca+cobrancaId+DEBITO).
+              // Sem isso, retry desta geração criaria débito duplicado.
+              referenciaTabela: 'Cobranca',
               descricao: 'Desconto automático na fatura via CooperToken',
             });
 

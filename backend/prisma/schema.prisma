@@ -2974,6 +2974,38 @@ model CooperTokenLedger {
   // em CooperTokenCompra cobre as 2 pernas do join.
   @@index([referenciaTabela, referenciaId])
   @@map("cooper_token_ledger")
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // UNIQUE PARCIAL SQL MANUAL — NÃO EXPRESSA POR PRISMA (@@unique)
+  // ═══════════════════════════════════════════════════════════════════════
+  // Nome do índice: cooper_token_ledger_ref_origem_uniq
+  // Criado em: 2026-07-20 (Corretiva CooperToken FASE 2, aprovado pelo
+  //   Luciano após Fase 1 read-only).
+  // Objetivo: idempotência de créditos e débitos por (referência, operação).
+  //   creditar()/debitar() em cooper-token.service.ts confiam neste
+  //   índice — o create() dentro da $transaction colide com P2002 se a
+  //   mesma referência+operação já foi processada, e o try/catch externo
+  //   converte a colisão em retorno idempotente (busca+retorna existente).
+  //
+  // DDL exato aplicado (rodar via SQL raw se recriar banco):
+  //
+  //   CREATE UNIQUE INDEX cooper_token_ledger_ref_origem_uniq
+  //     ON cooper_token_ledger ("cooperativaId","referenciaTabela","referenciaId",operacao)
+  //     WHERE "referenciaId" IS NOT NULL
+  //       AND "referenciaTabela" IS NOT NULL
+  //       AND "referenciaTabela" NOT IN ('RECONCILIACAO_HISTORICA');
+  //
+  // Por que não @@unique nativo:
+  //   Prisma NÃO expressa unique parcial com WHERE. Um @@unique cego
+  //   quebraria o db push — RECONCILIACAO_HISTORICA tem duplicata REAL e
+  //   LEGÍTIMA (ajuste contábil que pode repetir a mesma ref).
+  //
+  // ⚠ prisma db push NÃO GERENCIA este índice. Se rodar `prisma migrate
+  // reset` ou recriar o banco do zero, o índice SUME e a idempotência
+  // via P2002 deixa de funcionar (creditar/debitar viram race-suscetíveis
+  // outra vez). Sempre reaplique o CREATE UNIQUE INDEX manualmente após
+  // reset.
+  // ═══════════════════════════════════════════════════════════════════════
 }
 
 // ════════════════════════════════════════════════════════════════════

@@ -35,8 +35,16 @@ import { Prisma } from '@prisma/client';
 const SECRET = 'F4-bloco-C-secret-com-mais-de-32-caracteres-aqui';
 
 function gerarQrToken(quantidade: number, cooperativaId = 'coop-A') {
+  // Corretiva CooperToken 2026-07-20 — payload agora exige `jti` no JWT
+  // (anti-replay). Randômico por chamada pra não colidir entre testes.
   return jwt.sign(
-    { pagadorId: 'pagador-1', cooperativaId, quantidade, tipo: 'COOPER_TOKEN_QR' },
+    {
+      pagadorId: 'pagador-1',
+      cooperativaId,
+      quantidade,
+      tipo: 'COOPER_TOKEN_QR',
+      jti: 'jti-f4c-' + Math.random().toString(36).slice(2),
+    },
     SECRET,
   );
 }

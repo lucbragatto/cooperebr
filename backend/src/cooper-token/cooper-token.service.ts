@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
 import { CooperTokenTipo, CooperTokenOperacao, Prisma } from '@prisma/client';
@@ -116,6 +116,15 @@ interface DebitarParams {
   quantidade: number;
   tipo?: CooperTokenTipo;
   referenciaId?: string;
+  /**
+   * Corretiva CooperToken 2026-07-20 — obrigatório PRA idempotência.
+   * Junto com `referenciaId` forma a chave que o unique parcial
+   * `cooper_token_ledger_ref_origem_uniq` protege. Callers que NÃO
+   * passam ficam FORA do índice (sem proteção contra duplo débito por
+   * retry/concorrência). Nomes canônicos hoje: 'Cobranca' (DESCONTO_FATURA
+   * via cobrancas.service), 'OfertaClube' (FLEX via clube-vantagens).
+   */
+  referenciaTabela?: string;
   descricao?: string;
 }
 
@@ -428,13 +437,25 @@ export class CooperTokenService {
       return null;
     }
 
-    // Idempotência: se referenciaId fornecido, verificar duplicidade
+    // Corretiva CooperToken 2026-07-20 — DUPLA CAMADA de idempotência:
+    //  1) findFirst pré-tx (FAST-PATH): retry óbvio — o ledger já foi
+    //     commitado numa execução anterior, pula tx e retorna direto.
+    //     Sozinho, este check é race-suscetível (2 execuções simultâneas
+    //     leiam "não existe", ambas entram na tx).
+    //  2) Try/catch P2002 pós-tx (DEFESA REAL contra race): se duas
+    //     execuções passam o fast-path juntas, o `unique parcial`
+    //     cooper_token_ledger_ref_origem_uniq faz uma delas colidir no
+    //     create(). O catch abaixo converte P2002 em retorno idempotente.
+    // Callers sem `referenciaTabela` ficam fora do índice (sem proteção —
+    // documentado no CreditarParams).
     if (referenciaId && referenciaTabela) {
       const jaCredidato = await this.prisma.cooperTokenLedger.findFirst({
         where: { referenciaId, referenciaTabela, cooperadoId, cooperativaId },
       });
       if (jaCredidato) {
-        this.logger.log(`creditar: ${tipo} já creditado para ref ${referenciaTabela}/${referenciaId}, cooperado ${cooperadoId} — idempotente`);
+        this.logger.log(
+          `creditar: fast-path idempotente — ${referenciaTabela}/${referenciaId} cooperado ${cooperadoId} já creditado (ledger=${jaCredidato.id}), pula tx`,
+        );
         return jaCredidato;
       }
     }
@@ -463,7 +484,10 @@ export class CooperTokenService {
       ? Math.round(quantidadeLiquida * valorEmissao * 100) / 100
       : null;
 
-    const ledger = await this.prisma.$transaction(async (tx) => {
+    // Corretiva CooperToken 2026-07-20 — Serializable + catch P2002 idempotente.
+    let ledger: any;
+    try {
+      ledger = await this.prisma.$transaction(async (tx) => {
       // Buscar ou criar saldo
       let saldo = await tx.cooperTokenSaldo.findUnique({
         where: { cooperadoId },
@@ -546,7 +570,45 @@ export class CooperTokenService {
       }
 
       return entry;
-    });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (err) {
+      // Corretiva CooperToken 2026-07-20 — idempotência via unique parcial.
+      // P2002 no ledger.create = mesma (cooperativaId, referenciaTabela,
+      // referenciaId, operacao=CREDITO) já processada em execução anterior.
+      // A tx toda faz rollback (saldo NÃO duplicou); retornamos o ledger
+      // existente = no-op idempotente. Eventos contábeis + AuditLog abaixo
+      // NÃO disparam nesta 2ª execução (já dispararam na 1ª).
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002' &&
+        referenciaId &&
+        referenciaTabela
+      ) {
+        // Corretiva 2026-07-20 P3 #3 (revisor financeiro) — inclui
+        // cooperadoId no where. Blindagem contra o cenário teórico onde
+        // dois cooperados do mesmo tenant tivessem, por bug upstream, a
+        // mesma (referenciaTabela, referenciaId) — findFirst sem
+        // cooperadoId poderia retornar ledger de outro cooperado.
+        // Improvável hoje (referenciaId = CUID/UUID único), mas defesa
+        // barata contra regressão.
+        const existente = await this.prisma.cooperTokenLedger.findFirst({
+          where: {
+            cooperativaId,
+            cooperadoId,
+            referenciaTabela,
+            referenciaId,
+            operacao: CooperTokenOperacao.CREDITO,
+          },
+        });
+        if (existente) {
+          this.logger.log(
+            `creditar: idempotente via unique — ${referenciaTabela}/${referenciaId} operacao=CREDITO cooperativaId=${cooperativaId} cooperadoId=${cooperadoId} → ledger existente=${existente.id}`,
+          );
+          return existente;
+        }
+      }
+      throw err;
+    }
 
     // Emitir evento para lançamento contábil — Sprint Faxina (22/06/2026).
     // Classificação canônica decide qual evento emitir:
@@ -657,7 +719,44 @@ export class CooperTokenService {
    * sirva debitar() + usarNaFatura sem nested-tx.
    */
   async debitar(params: DebitarParams) {
-    const { cooperadoId, cooperativaId, quantidade, referenciaId, descricao } =
+    // Corretiva CooperToken 2026-07-20 (P2 #1 do revisor financeiro) —
+    // retry wrapper pra SerializationFailure (código Postgres 40001).
+    // Serializable pode abortar uma tx concorrente com 40001 (erro
+    // TRANSITÓRIO — a próxima tentativa geralmente passa). Sem retry,
+    // cron de cobrança propaga 500 sem reprocessar, cooperado perde
+    // desconto sem visibilidade. Retry: 3 tentativas, backoff exp curto
+    // (100/200/400ms). P2002 idempotente continua sendo tratado dentro
+    // de `_debitarTentativa` — retry só cobre 40001.
+    const MAX_TENTATIVAS = 3;
+    let ultimoErr: unknown;
+    for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+      try {
+        return await this._debitarTentativa(params);
+      } catch (err) {
+        const is40001 =
+          err instanceof Error &&
+          ((err as any).code === '40001' ||
+            err.message.includes('could not serialize access') ||
+            err.message.includes('serialization_failure'));
+        if (is40001 && tentativa < MAX_TENTATIVAS) {
+          const backoff = 100 * Math.pow(2, tentativa - 1);
+          this.logger.warn(
+            `debitar: SerializationFailure tentativa ${tentativa}/${MAX_TENTATIVAS} (cooperado=${params.cooperadoId}) — retry em ${backoff}ms`,
+          );
+          await new Promise((r) => setTimeout(r, backoff));
+          ultimoErr = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+    // Esgotou tentativas — propaga o último erro observado (sempre 40001
+    // por design; qualquer outro tipo teria sido throw dentro do loop).
+    throw ultimoErr;
+  }
+
+  private async _debitarTentativa(params: DebitarParams) {
+    const { cooperadoId, cooperativaId, quantidade, referenciaId, referenciaTabela, descricao } =
       params;
 
     // Sprint Faxina C-G (23/06/2026) — Fix estrutural pós-root-cause D-novo-
@@ -682,7 +781,15 @@ export class CooperTokenService {
     const valorTokenDeb = Number(configDebit?.valorTokenReais ?? 0.45);
     const valorEstimado = Math.round(quantidade * valorTokenDeb * 100) / 100;
 
-    return this.prisma.$transaction(async (tx) => {
+    // Corretiva CooperToken 2026-07-20 — Serializable evita duplo-gasto
+    // por race no check-then-write do saldo (2 débitos concorrentes leem
+    // mesmo saldo, ambos passam a validação, um leva o saldo a negativo).
+    // Espelha o padrão já usado em processarPagamentoQr (:4143),
+    // usarNaFatura e transferências. Se 2 tx serializáveis conflitam,
+    // Postgres aborta uma com 40001 (SerializationFailure) — Prisma
+    // propaga, o caller pode retry (nenhum débito indevido).
+    try {
+      return await this.prisma.$transaction(async (tx) => {
       const saldo = await tx.cooperTokenSaldo.findUnique({
         where: { cooperadoId },
       });
@@ -721,6 +828,10 @@ export class CooperTokenService {
           quantidade,
           saldoApos: novoSaldo,
           referenciaId,
+          // Corretiva 2026-07-20 — persistido pra participar do
+          // unique parcial cooper_token_ledger_ref_origem_uniq
+          // (idempotência via colisão P2002).
+          referenciaTabela,
           descricao: descricao ?? `Débito de ${quantidade} tokens`,
         },
       });
@@ -751,7 +862,42 @@ export class CooperTokenService {
       }
 
       return ledger;
-    });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (err) {
+      // Corretiva CooperToken 2026-07-20 — idempotência via unique parcial.
+      // Se o ledger.create colidiu no `cooper_token_ledger_ref_origem_uniq`,
+      // um débito com a mesma (cooperativaId, referenciaTabela, referenciaId,
+      // operacao=DEBITO) já foi processado. A tx toda faz rollback (saldo
+      // preservado), retornamos o ledger existente = no-op idempotente.
+      // NUNCA deixar P2002 virar 500 pra caller (cobrancas, clube-vantagens).
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002' &&
+        referenciaId &&
+        referenciaTabela
+      ) {
+        // Corretiva 2026-07-20 P3 #3 (revisor financeiro) — mesma
+        // blindagem de cooperadoId no where (ver comentário no `creditar`).
+        const existente = await this.prisma.cooperTokenLedger.findFirst({
+          where: {
+            cooperativaId,
+            cooperadoId,
+            referenciaTabela,
+            referenciaId,
+            operacao: CooperTokenOperacao.DEBITO,
+          },
+        });
+        if (existente) {
+          this.logger.log(
+            `debitar: idempotente via unique — ${referenciaTabela}/${referenciaId} operacao=DEBITO cooperativaId=${cooperativaId} cooperadoId=${cooperadoId} → ledger existente=${existente.id}`,
+          );
+          return existente;
+        }
+        // P2002 sem existente = estado inconsistente (índice corrupto,
+        // race resolvida diferente do esperado). Propaga pra investigar.
+      }
+      throw err;
+    }
   }
 
   calcularValorAtual(valorEmissao: number, createdAt: Date): number {
@@ -3861,11 +4007,23 @@ export class CooperTokenService {
       throw new BadRequestException('COOPERTOKEN_QR_SECRET deve ter no mínimo 32 caracteres');
     }
 
+    // Corretiva CooperToken 2026-07-20 — jti no payload assinado (anti-replay).
+    // Antes: o `jti` da TokenTransacao era gerado DENTRO do helper `criarTokenTransacao`
+    // (a cada `processarPagamentoQr`). Consequência: 2 scans do mesmo qrToken
+    // dentro dos 5min geravam 2 jti's diferentes → 2 TokenTransacao criadas →
+    // duplo débito do pagador. Agora: o jti nasce AQUI, assinado no JWT.
+    // Recebedor extrai e passa pro helper. Colisão no `jti @unique` → replay
+    // bloqueado (409 do lado de processarPagamentoQr). gerarTokenHex(16) =
+    // 32 chars hex (128 bits entropia, mesmo padrão do helper — reuso da
+    // função já auditada).
+    const jti = gerarTokenHex(16);
+
     const payload = {
       pagadorId,
       cooperativaId,
       quantidade,
       tipo: 'COOPER_TOKEN_QR',
+      jti,
     };
 
     const token = jwt.sign(payload, secret, { expiresIn: '5m' });
@@ -3911,6 +4069,7 @@ export class CooperTokenService {
       cooperativaId: string;
       quantidade: number;
       tipo: string;
+      jti?: string;
     };
 
     try {
@@ -3921,6 +4080,17 @@ export class CooperTokenService {
 
     if (decoded.tipo !== 'COOPER_TOKEN_QR') {
       throw new BadRequestException('Token inválido');
+    }
+
+    // Corretiva CooperToken 2026-07-20 — anti-replay: exige jti no payload.
+    // QRs assinados ANTES deste deploy não têm `jti` no payload (backward
+    // "incompatível" intencional — janela max de 5min entre deploy e QRs
+    // expirados). Aceitar jti-less manteria a race de replay ativa. Mensagem
+    // clara pra o cooperado gerar QR novo.
+    if (!decoded.jti || typeof decoded.jti !== 'string') {
+      throw new BadRequestException(
+        'QR gerado em versão anterior do sistema. Gere um novo QR de pagamento.',
+      );
     }
 
     if (decoded.pagadorId === recebedorId) {
@@ -4004,7 +4174,13 @@ export class CooperTokenService {
       origem: 'processarPagamentoQr',
     });
 
-    const result = await this.prisma.$transaction(async (tx) => {
+    // Corretiva CooperToken 2026-07-20 — try/catch pra P2002 no jti:
+    // 2ª chamada com o mesmo qrToken (replay dentro dos 5min) colide no
+    // `TokenTransacao.jti @unique`. A tx faz rollback (saldo NÃO debita),
+    // e retornamos 409 Conflict pra caller — pagamento NÃO é executado 2x.
+    let result: any;
+    try {
+      result = await this.prisma.$transaction(async (tx) => {
       // F4 Bloco C.1 MT-5 — saldo do pagador filtrado por cooperativaId
       // (defesa em profundidade; JWT do QR já trouxe cooperativaId, mas se
       // alguém forjar pagadorId apontando pra outra tenant, o filtro barra).
@@ -4102,6 +4278,12 @@ export class CooperTokenService {
       // Taxa F0 INTOCÁVEL — registramos em descricao mas helper não
       // recalcula. qrExpiresAt=null porque o JWT do QR já foi consumido
       // (não há expiração futura — a tx em si é a operação confirmada).
+      //
+      // Corretiva CooperToken 2026-07-20 — passamos o `jti` extraído do JWT
+      // (assinado por gerarQrPagamento). O helper usa esse jti no create;
+      // colisão P2002 (2ª chamada com o mesmo qrToken) é capturada no catch
+      // externo → tx rollback → 409 pra caller. Antes: helper gerava jti
+      // interno → 2 chamadas do mesmo qrToken → 2 jtis → duplo débito.
       const tokenTx = await criarTokenTransacao(tx, {
         pagadorId: decoded.pagadorId,
         pagadorCooperativaId: decoded.cooperativaId,
@@ -4113,6 +4295,7 @@ export class CooperTokenService {
         status: 'CONFIRMADA',
         pinValidadoEm,
         descricao: `Pagamento QR (taxa F1.5 qr: ${taxa})`,
+        jti: decoded.jti,
       });
 
       this.logger.log(
@@ -4140,7 +4323,26 @@ export class CooperTokenService {
         tokenTransacaoJti: tokenTx.jti,
         tier: tokenTx.tier,
       };
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (err) {
+      // Corretiva CooperToken 2026-07-20 — anti-replay: se o P2002 veio do
+      // `jti @unique` do TokenTransacao, é replay do MESMO qrToken (mesmo
+      // JWT com mesmo jti reapresentado). Retorna 409 Conflict — pagador
+      // não é debitado 2x, recebedor não é creditado 2x.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        const target = Array.isArray(err.meta?.target) ? err.meta.target as string[] : [];
+        if (target.includes('jti') || (err.meta?.target === 'TokenTransacao_jti_key')) {
+          this.logger.warn(
+            `[QR replay bloqueado] jti=${decoded.jti.slice(0, 8)}… pagador=${decoded.pagadorId.slice(0, 8)}… recebedor=${recebedorId.slice(0, 8)}… — 409`,
+          );
+          throw new ConflictException('QR já utilizado. Peça um novo QR ao pagador.');
+        }
+      }
+      throw err;
+    }
 
     // Sprint M52b Bloco F MELT (23/06/2026) — perna contábil da taxa QR
     // FORA da $transaction principal (Serializable) pra evitar nested-tx.
@@ -4676,6 +4878,14 @@ export class CooperTokenService {
         });
 
         // Ledger de débito.
+        // Corretiva CooperToken 2026-07-20 (P2 #2 do revisor financeiro) —
+        // adiciona `referenciaTabela: 'Cobranca'` pra participar do
+        // unique parcial `cooper_token_ledger_ref_origem_uniq`. Antes:
+        // usarNaFatura inline ficava FORA da idempotência P2002 (só o
+        // Serializable + status-guard protegiam). Consequência: duplo-click
+        // no botão "Usar tokens na fatura" podia debitar tokens 2x se as
+        // duas requisições chegassem simultâneas antes do status flip.
+        // Agora: mesmo caminho de proteção do `debitar()` externo.
         const ledger = await tx.cooperTokenLedger.create({
           data: {
             cooperadoId,
@@ -4685,6 +4895,7 @@ export class CooperTokenService {
             quantidade: tokensEfetivos,
             saldoApos: novoSaldoDisponivel,
             referenciaId: cobrancaId,
+            referenciaTabela: 'Cobranca',
             descricao: 'Abatimento na fatura via CooperToken (F4 Bloco A)',
           },
         });

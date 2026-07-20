@@ -93,8 +93,15 @@ export interface CriarTokenTransacaoParams {
   permitirCrossTenant?: boolean;
 
   /**
-   * Override do jti (uso restrito a testes que precisam de jti determinístico).
-   * Em produção SEMPRE deixe undefined → helper gera via gerarTokenHex(16).
+   * Override do jti — DUAS FONTES LEGÍTIMAS:
+   *  1. Anti-replay QR (Corretiva CooperToken 2026-07-20): `processarPagamentoQr`
+   *     passa o `jti` extraído do payload JWT do QR. Colisão P2002 no `@unique`
+   *     do jti → replay do mesmo qrToken bloqueado. Sem esse mecanismo, 2
+   *     escaneamentos do mesmo QR dentro dos 5min gerariam 2 TokenTransacao
+   *     com jti diferentes (o helper geraria interno) → duplo débito.
+   *  2. Testes que precisam de jti determinístico.
+   * Callers que NÃO se encaixam em (1) ou (2) devem deixar undefined —
+   * helper gera via gerarTokenHex(16).
    */
   jti?: string;
 }
