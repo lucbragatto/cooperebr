@@ -5,6 +5,7 @@ import {
   DisconnectReason,
   downloadMediaMessage,
   makeCacheableSignalKeyStore,
+  fetchLatestBaileysVersion,
 } from 'baileys';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
@@ -173,13 +174,28 @@ async function askCoopereAI(userMessage, senderInfo = {}) {
 async function startBaileys() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
+  // Versão do WhatsApp Web buscada dinamicamente. O WhatsApp aposenta
+  // versões antigas e rejeita o handshake com 405 (Method Not Allowed) —
+  // o hardcode [2,3000,1034195523] venceu e deixou o bot mudo desde
+  // ~2026-07-17 (405 em todo connect, sem virar loggedOut). Fallback pro
+  // hardcode antigo se a busca falhar (offline) — no pior caso, não pior
+  // que estava.
+  let waVersion = [2, 3000, 1034195523];
+  try {
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    waVersion = version;
+    console.log(`📌 WhatsApp Web version: ${version.join('.')} (isLatest=${isLatest})`);
+  } catch (e) {
+    console.warn(`⚠️ fetchLatestBaileysVersion falhou (${e.message}) — usando fallback ${waVersion.join('.')}`);
+  }
+
   sock = makeWASocket({
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, logger),
     },
     logger,
-    version: [2, 3000, 1034195523],
+    version: waVersion,
     browser: ['Chrome', 'Chrome', '145.0.0'],
   });
 
