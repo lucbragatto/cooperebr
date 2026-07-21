@@ -55,8 +55,11 @@ export class ContratosController {
   @AuditLog({ acao: 'contrato.atualizar', recurso: 'Contrato', recursoIdParam: 'id' })
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: UpdateContratoDto, @Req() req: any) {
-    // D-48.6: idem create.
-    return this.contratosService.update(id, dto as any, req.user?.cooperativaId ?? null);
+    // Revisor multitenant 21/07 achado P1 — fail-CLOSED (era `?? null`,
+    // COOPERADO com cooperativaId=null teria bypass silencioso — mitigado
+    // por @Roles mas viola invariante do helper).
+    const cooperativaId = resolveTenantIdFromReq(req);
+    return this.contratosService.update(id, dto as any, cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN)

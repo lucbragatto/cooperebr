@@ -42,6 +42,14 @@ export class UsinasService {
     if (uc.distribuidora) {
       where.distribuidora = uc.distribuidora;
     }
+    // Revisor multitenant 21/07 achado P2 — a validacao da UC no tenant nao
+    // basta. A query de usinas tinha `findMany({where})` sem cooperativaId —
+    // ADMIN de A com UC valida em A recebia usinas de TODOS os tenants
+    // (nome, capacidade, cidade, proprietario). Fix: filtrar usinas por
+    // cooperativaIdJwt tambem. Null = SUPER_ADMIN bypass.
+    if (cooperativaIdJwt) {
+      where.cooperativaId = cooperativaIdJwt;
+    }
 
     const usinas = await this.prisma.usina.findMany({
       where,

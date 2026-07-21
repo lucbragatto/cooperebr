@@ -8,6 +8,7 @@ import { DocumentosService } from './documentos.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { TenantResource } from '../auth/tenant-resource.decorator';
+import { resolveTenantIdFromReq } from '../auth/tenant-resolver';
 
 @Controller('documentos')
 @Roles(PerfilUsuario.ADMIN, PerfilUsuario.OPERADOR)
@@ -32,12 +33,12 @@ export class DocumentosController {
     @UploadedFile() arquivo: Express.Multer.File,
     @Req() req: any,
   ) {
-    return this.documentosService.uploadAdmin(cooperadoId, tipo, arquivo, req.user?.cooperativaId ?? null);
+    return this.documentosService.uploadAdmin(cooperadoId, tipo, arquivo, resolveTenantIdFromReq(req));
   }
 
   @Patch(':id/aprovar')
   aprovar(@Param('id') id: string, @Req() req: any) {
-    return this.documentosService.aprovar(id, req.user?.cooperativaId ?? null);
+    return this.documentosService.aprovar(id, resolveTenantIdFromReq(req));
   }
 
   @Patch(':id/reprovar')
@@ -46,11 +47,11 @@ export class DocumentosController {
     @Body('motivoRejeicao') motivoRejeicao: string,
     @Req() req: any,
   ) {
-    return this.documentosService.reprovar(id, motivoRejeicao, req.user?.cooperativaId ?? null);
+    return this.documentosService.reprovar(id, motivoRejeicao, resolveTenantIdFromReq(req));
   }
 
   @Delete(':id')
   remove(@Param('id') id: string, @Req() req: any) {
-    return this.documentosService.remove(id, req.user?.cooperativaId ?? null);
+    return this.documentosService.remove(id, resolveTenantIdFromReq(req));
   }
 }

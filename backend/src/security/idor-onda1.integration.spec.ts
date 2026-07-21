@@ -56,7 +56,7 @@ describe('IDOR Onda 1 — vazamento LGPD cross-tenant (integration real)', () =>
       data: {
         cooperativaId: TENANT_A_ID,
         nomeCompleto: `[${SMOKE_TAG}] Cooperado A`,
-        cpf: '000.000.000-11',
+        cpf: `SMK1-${Date.now()}-A`,
         telefone: SMOKE_TEL,
         email: SMOKE_EMAIL_A,
         status: 'ATIVO_RECEBENDO_CREDITOS',
@@ -73,7 +73,7 @@ describe('IDOR Onda 1 — vazamento LGPD cross-tenant (integration real)', () =>
       data: {
         cooperativaId: tenantBId,
         nomeCompleto: `[${SMOKE_TAG}] Cooperado B`,
-        cpf: '000.000.000-22',
+        cpf: `SMK1-${Date.now()}-B`,
         telefone: SMOKE_TEL,
         email: SMOKE_EMAIL_B,
         status: 'ATIVO_RECEBENDO_CREDITOS',
