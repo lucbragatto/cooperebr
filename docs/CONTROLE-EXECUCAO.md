@@ -79,7 +79,42 @@
 
 ---
 
-## ONDE PARAMOS — 2026-07-21 (Code + Luciano operacional — ROTA B concluída: Achado 3 fechado; **Corretiva Mensageria WA 9/9 provada end-to-end**)
+## ONDE PARAMOS — 2026-07-21 (DIA DUPLO — MANHÃ: ROTA B Achado 3 fechado / TARDE: Corretiva IDOR 13 furos + SUSPECT em 3 ondas + 3.5)
+
+🟢 **21/07 — DIA DUPLO.**
+- **Manhã** (registrada abaixo): ROTA B fechada — Achado 3 rotacionado, **Corretiva Mensageria WA 9/9 provada end-to-end** (round-trip inbound real, bot respondeu com menu completo).
+- **Tarde** (nova seção abaixo, esta): **Corretiva IDOR/multi-tenant completa** — 13 furos + SUSPECT contratos em 3 ondas + 3.5 pós-revisão, **110/110 testes**, prova por mutação rodada em 3 pontos (Onda 1 pixChave, Onda 2 faturas gate, Onda 3 HS256 SEM pin), **6 commits pushados** (`cfe4813..f15439f`).
+
+### Corretiva IDOR/multi-tenant (tarde 21/07) — 6 commits
+
+**Escopo definido no início:** NÃO tocar em `asaas/`, `cobrancas/`, `cooper-token/` (reservados pra Tarefa 4 — próxima frente). 25 arquivos backend + specs + débitos.
+
+**Ondas entregues:**
+- **Onda 1 (LGPD)** `cfe4813` — itens 1+3+5+7+9. Helper novo `tenant-resolver.ts` fail-CLOSED por PERFIL (substitui `?? null` que viraria IDOR pro COOPERADO com cooperativaId=null no banco). Pix-excedente cortou vazamento LGPD ATIVO (leitura pixChave rodava ANTES do check da feature flag).
+- **Onda 2 (IDOR estrutural)** `7e6aace` — itens 2+4+6+8(a/b/c)+SUSPECT contratos. `@TenantResource` + `via:'cooperado.cooperativaId'` no item 8a (drift: 19 UCs Uc.cooperativaId=NULL + 2 divergentes). 2 tests adicionais rodam o guard real com PrismaClient contra a UC de coluna nula.
+- **Onda 3 (hardening)** `d3bfc63` — throttle 5/min nos 2 endpoints públicos + FileInterceptor limits 15MB + `algorithms:['HS256']` no jwt.strategy.
+- **Onda 3.5 (pós-revisão)** `7ff4ee4` — 2 P1 (documentos+contratos update usavam `?? null`) + 1 P2 (usinas findDisponiveis vazava usinas cross-tenant além da UC validada) + CPFs únicos nos specs (colisão paralela Jest).
+- **Task 3 spec HS256** `a6d6a49` + `f15439f` — 8/8 PASS (4 integration HTTP + 4 unit mutation `jsonwebtoken`). Bloqueava push por pedido do Luciano após alarme falso do login humano ser DHCP e não a corretiva.
+
+**3 correções de desenho que a revisão forçou ANTES de virar código:**
+1. Helper `fail-CLOSED por PERFIL` no lugar do `null = SUPER_ADMIN bypass` — a auditoria achou 1 COOPERADO sem cooperativaId no banco. O padrão original criaria IDOR novo pelo próprio fix.
+2. Teste da UC com coluna nula — spec do guard prova o MECANISMO; NÃO o DADO. Sem esses 2 tests adicionais, 19 UCs sumiriam se `via` estivesse mal montado e só descobriríamos por reclamação.
+3. Prova real do HS256 no lugar do smoke `/auth/me 401` — sem `token VÁLIDO → não-401` na baseline, "todo mundo trancado fora" (auth quebrada) passaria despercebido.
+
+**2 alarmes falsos desmontados durante a sessão:**
+1. "Frontend errored" no `pm2 list` — serviço estava servindo HTTP 200 normal. Contabilidade do PM2 daemon furada (rpc.sock EPERM). Reparo: `pm2 kill` + `Stop-Process` explícito + `pm2 start ecosystem`. Cascade: sessão WA se perdeu do lado Meta (bot em `awaiting_qr` — precisa re-parear pelo celular quando houver janela).
+2. Login falhando com `ERR_CONNECTION_TIMED_OUT` — era DHCP mudando IP do host (.88 → .11), `NEXT_PUBLIC_API_URL` bakeado no build do Next.js. Nem chegou no backend, algorithms HS256 nem foi exercitado. Fix: `.env.local` + rebuild frontend + restart. Débitos catalogados (`D-novo-API-URL-IP-CONGELADO` P2 + `D-novo-LOGIN-ERRO-ENGANOSO` UX P2).
+
+**Débitos novos catalogados nesta corretiva** (`docs/debitos-tecnicos.md`):
+7 da revisão (P1 pix-excedente SUPER_ADMIN órfão, P1 pix-excedente idempotência, P2 subtotais imposto, P3 log Asaas pixChave, P3 email-monitor identificarPorOcr, P3 clube-vantagens `|| qCoopId`, P3 tests drift DocumentoCooperado) + 2 DHCP/UX + 3 originais (`D-novo-JWT-TTL-LONGO`, `D-novo-OCR-PUBLICO-TOKEN-SESSAO`, `D-novo-UC-TENANT-DRIFT`) + ampliação do `D-novo-WA-ZUMBI-PORTA-3002` (agora cobre daemon PM2 inteiro, não só :3002).
+
+**Regra nova catalogada nesta sessão:** baseline de mudança em AUTH é **"token VÁLIDO → 200"**, NUNCA "sem token → 401" — o segundo passa mesmo com o sistema totalmente quebrado.
+
+Detalhe: `docs/sessoes/2026-07-21-corretiva-idor-multitenant.md`.
+
+---
+
+## ONDE PARAMOS — 2026-07-21 (MANHÃ — Code + Luciano operacional — ROTA B concluída: Achado 3 fechado; **Corretiva Mensageria WA 9/9 provada end-to-end**)
 
 **Escopo:** sessão operacional 1h30 conduzida passo a passo — orquestrador prescreveu, Luciano executou no shell (regra_nao_trabalhar_paralelo_com_code). Bloco 3 do runbook `restart-coordenado-achado-3-4-8.md` executado + smoke Bloco 5 completo. **Zero commit de código** (rotação é operacional, `.env` não vai pro repo). 1 commit `docs(sessao)` só (este fechamento).
 
@@ -4138,16 +4173,17 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    + `cooperebr-multitenant-reviewer` aparecem na lista de agents.
    Se não aparecerem, parar e avisar.
 
-2. Rodar `git status --short`. Esperado pós-fechamento 20/07 (DELTA ROTA B):
+2. Rodar `git status --short`. Esperado pós-fechamento 21/07 tarde (Corretiva IDOR):
    working tree limpo (exceto carry-over conhecido: `.agent/`,
    `.claude/agents/*` não-meus, `.e2e-tmp/`, scripts experimentais
    `backend/scripts/__*`/`test-*.mjs`, `ponte-wa-telegram-leve/`,
    sobra `backend/node_modules/.prisma/client/query_engine-windows.dll.node.old`
-   do troubleshooting Prisma, **novo carry-over: `whatsapp-service/auth_info.acl.pre-corretiva.bak`**
-   — backup do Achado 4, untracked por design, é rollback local). NUNCA
-   `git add .` / `-A`. Último commit em main deve ser `docs(sessao):
-   fechamento 20/07 ROTA B + bot ressuscitado`. `git log origin/main..HEAD
-   --oneline` deve estar VAZIO.
+   do troubleshooting Prisma, `whatsapp-service/auth_info.acl.pre-corretiva.bak`
+   (backup Achado 4), `docs/diagramas/cadastro-usinas.html` M
+   (line-ending flip, última mudança semântica 17/05 commit `7382063`,
+   NÃO commitar). NUNCA `git add .` / `-A`. Último commit em main deve
+   ser `docs(sessao): fechamento 21/07 — corretiva IDOR 13 furos + ROTA B
+   Achado 3`. `git log origin/main..HEAD --oneline` deve estar VAZIO.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    + cooperebr-whatsapp online. Schemas aplicados no banco dev/prod-lite:
@@ -4176,92 +4212,119 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    do fallback query `?secret=` no receptor (`backend/src/whatsapp/whatsapp-fatura.controller.ts:100-111`)
    — retirar suporte a query + warn. Isso fecha a compat window do Achado 3.
 
-PASSO 1 — Frase COMANDANTE (ROTA A é a próxima; ROTA B fechada 21/07):
+PASSO 1 — Frase COMANDANTE (Corretiva IDOR + ROTA B FECHADAS 21/07; próxima frente = Tarefa 4):
 
-🟢 **21/07/2026 (manhã) — CORRETIVA MENSAGERIA WA 9/9 PROVADA END-TO-END**:
-Achado 3 rotacionado + smoke inbound real (bot respondeu ao Luciano com menu
-completo). Arco fechado 16/07 → 21/07. Detalhe consolidado:
-`docs/sessoes/2026-07-21-rota-b-achado-3-rotacao-secret.md`.
+🟢 **21/07/2026 — DIA DUPLO.**
+- **Manhã:** ROTA B fechada — Achado 3 rotacionado, Corretiva Mensageria WA
+  9/9 provada end-to-end (round-trip inbound REAL, bot respondeu com menu
+  completo pro Luciano). Detalhe: `docs/sessoes/2026-07-21-rota-b-achado-3-rotacao-secret.md`.
+- **Tarde:** Corretiva IDOR/multi-tenant completa — 13 furos + SUSPECT contratos
+  em 3 ondas + 3.5 pós-revisão, **110/110 testes**, prova por mutação rodada em
+  3 pontos (Onda 1 pixChave, Onda 2 faturas gate, Onda 3 HS256 SEM pin),
+  **6 commits pushados** (`cfe4813..f15439f`). Detalhe:
+  `docs/sessoes/2026-07-21-corretiva-idor-multitenant.md`.
 
-**Próxima frente: ROTA A — Tarefa 4 (Asaas emissão idempotência).**
+**Próxima frente: TAREFA 4 — Asaas EMISSÃO (idempotência + retry unificado).**
 
-═══ PRÉ-CHECK OBRIGATÓRIO ANTES DE COMEÇAR ═══
+═══ FASE 1 READ-ONLY JÁ FOI FEITA em 21/07 — NÃO REFAZER O LEVANTAMENTO ═══
 
-Confirmar em `/dashboard/configuracoes/asaas` (ou via `SELECT` no banco em
-`gatewayPagamentoConfig` do tenant CoopereBR) se o gateway está em **SANDBOX**
-ou **PRODUÇÃO**. Muda a urgência:
+Resultados travados (não re-inventar):
 
-- **SANDBOX**: fix-forward puro, auditoria já confirmou 0 duplicatas hoje.
-  Prioridade média — agenda quando der.
-- **PRODUÇÃO**: mesmo defeito cobra dinheiro real de cooperado a cada
-  double-click da UI. Prioridade alta — agendar próximas 48h + comunicar
-  cooperados afetados se houver duplicata histórica.
+- **PRÉ-CHECK RESPONDIDO:** gateway em **SANDBOX** (AsaasConfig legado E
+  ConfigGateway F2 concordam; só CoopereBR configurada). NENHUM dinheiro real
+  em risco hoje. **É bloqueador de VIRADA pra produção, não emergência.**
+- **0 duplicatas por cobrancaId e 0 por asaasId** — fix-forward puro, sem
+  reparo de dado.
+- **7 emissões no total, todas RECEIVED, última em 11/06** (caminho dormente).
+- **A máquina de retry JÁ EXISTE e já tem teste** — enum `StatusEmissao`
+  (`schema:1085`), campos `statusEmissao`/`tentativasEmissao`/`ultimoErroEmissao`/
+  `ultimaTentativaEmissaoEm`, cron 30min com cap 5 + backoff + `FALHA_EMISSAO`
+  + notif admin (`convenios.job.ts:93`), spec `convenios-job-retry.spec.ts`.
+  Só NÃO alcança o caminho regular — o job filtra `convenioContabilCobrancaId
+  != null` (job:108). **A obra é LIGAR, não construir.**
+- **DEFEITO RAIZ (pior que o descrito no plano original):** o sinal de falha é
+  DESTRUÍDO NA ORIGEM. `emitirNoGatewaySeConfigurado`
+  (`cobrancas.service.ts:1157-1185`) retorna `null` em QUATRO situações — 3
+  skips legítimos (`:1157`, `:1164`, `:1173`) e 1 falha real (`:1184`) — e
+  captura internamente, então NUNCA lança: o `try/catch` do chamador (`:377`)
+  é **código morto**. Por isso o WhatsApp (`:383`) e o email (`:399`) disparam
+  incondicionalmente e o cooperado é avisado de uma cobrança SEM boleto nem PIX.
 
-═══ ROTA A — Tarefa 4 (Asaas emissão idempotência + retry unificado) ═══
+═══ DESENHO APROVADO — 6 correções em ordem de dependência ═══
 
-═══ ROTA A — Tarefa 4 (Asaas emissão idempotência + retry unificado) — CÓDIGO ═══
+1. **Retorno discriminado** `SEM_GATEWAY | EMITIDO | FALHOU` no lugar de `null`.
+2. **Marcar-antes-de-tentar** no caminho regular (padrão do convênio,
+   `convenios-custeio.service.ts:1005`).
+3. **Relaxar o filtro do cron** — seguro por construção, o histórico tem
+   `statusEmissao=null` e fica de fora.
+4. **Não notificar quando FALHOU** (SEM_GATEWAY continua notificando — os 307
+   faturados manualmente NÃO podem parar de receber aviso).
+5. **Idempotência em 3 camadas** — `externalReference=cobrancaId` +
+   `@@unique([cobrancaId])` em `AsaasCobranca` + look-before-emit (unique em
+   coluna nullable é seguro no Postgres).
+6. **Órfã** — se o POST der certo e a gravação local falhar, persistir o
+   `payment.id` mesmo no caminho de erro e logar em `ERROR`.
 
-Sessão dedicada tipo "Fase 1 read-only → aprovação do desenho → Fase 2 execução
-→ revisor obrigatório". Cobre 3 defeitos financeiros ativos:
+═══ LEVAR JUNTO nesta sessão (mesma família) ═══
 
-1. `cobrancas.service.ts:362-376` + `:887-890` engolem exceção da emissão do
-   Asaas 2× com logger.warn e retornam cobrança "normal" → cobrança fica SEM
-   boleto/PIX + cooperado é notificado mesmo assim + NADA reprocessa. Retry
-   por statusEmissao=AGUARDANDO_EMISSAO só existe no caminho de convênio
-   (`convenios.job.ts`); regular não seta.
+`D-novo-PIX-EXCEDENTE-IDEMPOTENCIA` (P1) — sem guard no
+`pix-excedente.service.ts:176`, double-click dispara 2 PIX reais quando
+`ASAAS_PIX_EXCEDENTE_ATIVO` ligar. Padrão `WebhookEvent @@unique` já
+consolidado desde FASE 2 de 20/07 — resolver os 2 numa sessão só faz sentido.
 
-2. `AsaasService.emitirCobranca` (`asaas.service.ts:260`) faz POST `/payments`
-   SEM externalReference + SEM idempotency key + AsaasCobranca sem
-   `@@unique(cobrancaId)`/`@@unique(asaasId)` → double-click/retry = cobrança
-   DUPLA REAL no gateway. **Auditoria já confirmou 0 duplicatas hoje** —
-   fix-forward puro, sem reparo de dado nesta sessão.
+═══ GUARDRAILS ═══
 
-3. POST e `asaasCobranca.create` são sequenciais não-transacionais (`:260`
-   depois `:269`) → se POST OK mas create local falha, vira cobrança órfã
-   que o webhook nunca reconcilia (findFirst por asaasId não acha).
+- Schema muda (`@@unique`) → ritual `prisma db push` com PM2 parado.
+- Rebuild backend após src (`pm2 stop; cd backend; npm run build; pm2 restart
+  cooperebr-backend --update-env`).
+- Multi-tenant: `cooperativaId` do JWT sempre. Usar `resolveTenantIdFromReq`
+  (helper novo da Corretiva IDOR 21/07).
+- Contatos-teste: `27981341348` + `lucbragatto+suffix@gmail.com`.
+- **REGRA NOVA (21/07 Onda 3)** — baseline de mudança em auth/idempotência é
+  "operação legítima → 200 + efeito colateral esperado", NUNCA só "sem token →
+  401" (segundo passa mesmo com sistema totalmente quebrado).
+- Rodar `cooperebr-financeiro-token-reviewer` E `cooperebr-multitenant-reviewer`
+  no fim.
+- **SEM push sem OK explícito.**
 
-Fix aprovado da Fase 1 (documento futuro):
-- `externalReference = cobrancaId` no POST + `@@unique` em
-  `AsaasCobranca(cobrancaId)`. Look-before-emit → retorna existente se já
-  postou (idempotente).
-- Unificar retry: no caminho REGULAR, ao falhar setar
-  `statusEmissao=AGUARDANDO_EMISSAO` + `ultimoErroEmissao`, e estender cron
-  de retry (padrão convênio, tentativas<5, backoff 30min) pra varrer TAMBÉM
-  as regulares. **NÃO notificar o cooperado (email/WA) enquanto não houver
-  instrumento de pagamento emitido.**
-- Reconciliação de órfã: se POST der certo mas create local falhar, capturar
-  asaasId retornado e persistir mesmo em caminho de erro (ou reconciliar via
-  externalReference). Logar em ERRO, não warn.
+═══ PENDÊNCIAS OPERACIONAIS ABERTAS (não bloqueiam Tarefa 4) ═══
 
-Guardrails: schema change (@@unique + possível statusEmissao no caminho
-regular) → ritual db push com PM2 parado. Rebuild backend. Multi-tenant
-cooperativaId do JWT. Contatos-teste 27981341348 / lucbragatto+suffix@gmail.com.
-Rodar `cooperebr-financeiro-token-reviewer` E `cooperebr-multitenant-reviewer`
-no fim. SEM push sem OK explícito.
-
-═══ ROTA B — FECHADA 21/07 (Achado 3 rotacionado + smoke inbound real OK) ═══
-
-Não retomar. Documentação histórica em
-`docs/sessoes/2026-07-21-rota-b-achado-3-rotacao-secret.md`. Runbook
-`docs/seguranca/restart-coordenado-achado-3-4-8.md` atualizado com fix do
-`Get-Clipboard` (D-novo-RUNBOOK-CLIPBOARD-CONTAMINACAO). Único resíduo é
-o Bloco 6 (monitor 24h) — ver PASSO 0 item 5 acima.
+- **Confirmar login no navegador** — frontend repontado pro IP `.11` após
+  DHCP ter trocado (débito `D-novo-API-URL-IP-CONGELADO`). Se der timeout
+  de novo, checar `Get-NetIPAddress` (DHCP pode ter mudado outra vez).
+- **Sessão WA em `awaiting_qr`** — cascade do reparo PM2. Re-parear pelo
+  celular quando houver janela. Não bloqueia Tarefa 4 (que não usa WA).
+- **Canário do gate item 4** (Onda 1 corretiva IDOR) — vigiar `Forbidden`
+  nos logs do `email-monitor` na 1ª semana: `pm2 logs cooperebr-backend
+  | Select-String "ForbiddenException.*email-monitor"`. Zero é o esperado.
+- **Bloco 6 da ROTA B** — janela 24h fecha 22/07 07:46 BRT. Se zero warns de
+  `WA-WEBHOOK.*deprecated`, retirar o fallback `?secret=` do receptor
+  (`whatsapp-fatura.controller.ts:100-111`).
 
 ═══ Débitos abertos pra sessões dedicadas futuras ═══
 
-Nenhum bloqueia ROTA A. Grupo P2 mensageria/token/webhook:
+Grupo P2 mensageria/token/webhook (nenhum bloqueia Tarefa 4):
 `D-novo-CT-MLM-ATOMICO` (indicacoes atômico + cron reconciliação),
 `D-novo-WEBHOOK-PJ-SLOT-UNICO` (migrar listener compra-PJ pro WebhookEvent),
 `D-novo-CT3-CRON-RECONCILIACAO` (cron Cobranca-PAGO-sem-LancamentoContabil),
 `D-novo-MIGRATIONS-ABANDONADAS` (reconciliar `backend/prisma/migrations/` —
-JAMAIS `migrate dev` casual), `D-novo-WA-ZUMBI-PORTA-3002` (`pm2
-stop/restart` deixa órfão em Windows — investigar SIGKILL/SIGTERM; guard
-de startup no wa-service quando `:3002` já ocupado), `D-novo-WA-LOG-CHAVES-SESSAO`
-(pino verboso dumpa `privKey`/`rootKey` no `wa-out.log` — subir logger
-`trace`→`info`), **`D-novo-RUNBOOK-CLIPBOARD-CONTAMINACAO` (NOVO — P3)**
-runbook fix já aplicado, sem tarefa restante além de propagar padrão pra
-runbooks futuros, Tarefas 6/7/8 (email OCR move seletivo, sender WA/email
-status inspection, fatura OCR schema zod).
+JAMAIS `migrate dev` casual), `D-novo-WA-ZUMBI-PORTA-3002` (AMPLIADO —
+cobre daemon PM2 inteiro pós rpc.sock EPERM, não só :3002),
+`D-novo-WA-LOG-CHAVES-SESSAO`, `D-novo-RUNBOOK-CLIPBOARD-CONTAMINACAO`.
+
+Da Corretiva IDOR 21/07 tarde (7 novos): `D-novo-PIX-EXCEDENTE-SUPERADMIN-ORFAO`
+(P1), `D-novo-PIX-EXCEDENTE-IDEMPOTENCIA` (P1 — LEVAR JUNTO NA TAREFA 4),
+`D-novo-PIX-EXCEDENTE-SUBTOTAIS-IMPOSTO` (P2), `D-novo-ASAAS-LOG-PIXCHAVE-VAZAMENTO`
+(P3), `D-novo-EMAILMONITOR-IDENTIFICARPOROCR` (P3), `D-novo-CLUBE-VANTAGENS-QCOOPID-PADRAO`
+(P3), `D-novo-TESTS-DRIFT-DOCUMENTOCOOPERADO` (P3).
+
+Do incidente DHCP (2 novos): `D-novo-API-URL-IP-CONGELADO` (P2 —
+NEXT_PUBLIC_API_URL bakeado no build quebra login em cada troca de DHCP),
+`D-novo-LOGIN-ERRO-ENGANOSO` (P2 UX — network error mostrado como "senha
+inválida").
+
+Tarefas 6/7/8 (email OCR move seletivo, sender WA/email status inspection,
+fatura OCR schema zod).
 ```
 
 **Frente 2 — Vitrines Mínimas + Pipeline de Captação** (manhã+tarde, 7 commits):
