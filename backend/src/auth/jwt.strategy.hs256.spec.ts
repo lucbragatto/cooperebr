@@ -17,6 +17,12 @@
  *
  * Ambos precisam passar. Se o backend nao estiver rodando, (A) da timeout —
  * rodar PM2 antes: pm2 restart cooperebr-backend --update-env.
+ *
+ * DEPENDENCIA DE AMBIENTE (CI): este spec le JWT_SECRET de backend/.env em
+ * disco (readJwtSecret). Se um dia rodar em CI sem esse arquivo, `readFileSync`
+ * lanca ENOENT ou o match falha e o spec aborta com "JWT_SECRET nao encontrado
+ * em backend/.env". Fix pra CI: passar JWT_SECRET pela env var do runner
+ * (readJwtSecret ja tem fallback pra process.env.JWT_SECRET na primeira linha).
  */
 import { verify, sign, JsonWebTokenError } from 'jsonwebtoken';
 import * as fs from 'fs';
