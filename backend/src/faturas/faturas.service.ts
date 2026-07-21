@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, Logger, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, BadRequestException, InternalServerErrorException, ForbiddenException, NotFoundException, Logger, Inject, forwardRef } from '@nestjs/common';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { TipoDocumento, ModeloCobranca, CooperTokenTipo, DistribuidoraEnum } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
@@ -1402,12 +1402,27 @@ export class FaturasService {
     return resultado;
   }
 
-  async uploadDocumento(dto: UploadDocumentoDto): Promise<{
+  async uploadDocumento(
+    dto: UploadDocumentoDto,
+    cooperativaIdJwt: string | null,
+  ): Promise<{
     sucesso: boolean;
     url: string;
     tipoDocumento: string;
     documentoId: string;
   }> {
+    // Corretiva IDOR 21/07 Onda 1 item 3 — valida cooperadoId do dto no tenant
+    // do JWT ANTES de qualquer gravacao. cooperativaIdJwt null = SUPER_ADMIN
+    // (bypass intencional). Defesa em profundidade — o self-check FATURA-01 no
+    // controller ja cobre COOPERADO; este check cobre ADMIN/OPERADOR
+    // cross-tenant.
+    if (cooperativaIdJwt) {
+      const cooperadoAlvo = await this.prisma.cooperado.findFirst({
+        where: { id: dto.cooperadoId, cooperativaId: cooperativaIdJwt },
+        select: { id: true },
+      });
+      if (!cooperadoAlvo) throw new NotFoundException('Cooperado não encontrado');
+    }
     const ext = dto.tipoArquivo === 'pdf' ? 'pdf' : 'jpg';
     const filePath = `${dto.cooperadoId}/${dto.tipoDocumento}-${Date.now()}.${ext}`;
     const buffer = Buffer.from(dto.arquivoBase64, 'base64');

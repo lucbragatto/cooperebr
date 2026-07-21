@@ -2,6 +2,7 @@ import { Controller, Get, Put, Post, Param, Body, Req, Query, ForbiddenException
 import { ClubeVantagensService } from './clube-vantagens.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { TenantResource } from '../auth/tenant-resource.decorator';
 
 const { SUPER_ADMIN, ADMIN, COOPERADO } = PerfilUsuario;
 
@@ -43,7 +44,10 @@ export class ClubeVantagensController {
     return this.service.getProgressao(cooperadoId);
   }
 
+  // Corretiva IDOR 21/07 Onda 1 item 9b — guarda posse do cooperado no tenant.
+  // Guard 404 cross-tenant automático (SUPER_ADMIN bypass). Service permanece.
   @Roles(SUPER_ADMIN, ADMIN)
+  @TenantResource({ model: 'cooperado', idParam: 'id' })
   @Get('cooperado/:id')
   getProgressaoCooperado(@Param('id') id: string) {
     return this.service.getProgressao(id);

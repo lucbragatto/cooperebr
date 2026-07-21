@@ -7,6 +7,7 @@ import { UploadDocumentoDto } from './dto/upload-documento.dto';
 import { UploadConcessionariaDto } from './dto/upload-concessionaria.dto';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { resolveTenantIdFromReq } from '../auth/tenant-resolver';
 
 @Controller('faturas')
 @Roles(PerfilUsuario.SUPER_ADMIN, PerfilUsuario.ADMIN, PerfilUsuario.OPERADOR, PerfilUsuario.COOPERADO)
@@ -89,8 +90,18 @@ export class FaturasController {
   }
 
   @Post('documento')
-  documento(@Body() dto: UploadDocumentoDto): Promise<unknown> {
-    return this.faturasService.uploadDocumento(dto);
+  documento(@Body() dto: UploadDocumentoDto, @Req() req: any): Promise<unknown> {
+    // Corretiva IDOR 21/07 Onda 1 item 3 — self-check FATURA-01 espelhado do
+    // vizinho upload-concessionaria (linhas 82-87) + tenant do JWT fail-CLOSED
+    // via resolveTenantIdFromReq pra ADMIN/OPERADOR. Ninguém envia documento
+    // por conta de outro cooperado (LGPD).
+    if (req.user?.perfil === PerfilUsuario.COOPERADO) {
+      if (!req.user.cooperadoId || dto.cooperadoId !== req.user.cooperadoId) {
+        throw new ForbiddenException('Cooperado só pode enviar documento para si mesmo');
+      }
+    }
+    const cooperativaId = resolveTenantIdFromReq(req);
+    return this.faturasService.uploadDocumento(dto, cooperativaId);
   }
 
   @Patch(':id/vincular')

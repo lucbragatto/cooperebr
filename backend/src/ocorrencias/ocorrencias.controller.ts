@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Delete, Param, Body, Req } from '@nestjs/co
 import { OcorrenciasService } from './ocorrencias.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { TenantResource } from '../auth/tenant-resource.decorator';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
 
@@ -21,7 +22,10 @@ export class OcorrenciasController {
     return this.ocorrenciasService.findOne(id, req.user?.cooperativaId);
   }
 
+  // Corretiva IDOR 21/07 Onda 1 item 9a — guarda posse do cooperado no tenant.
+  // Guard 404 cross-tenant automático (SUPER_ADMIN bypass). Service permanece.
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
+  @TenantResource({ model: 'cooperado', idParam: 'cooperadoId' })
   @Get('cooperado/:cooperadoId')
   findByCooperado(@Param('cooperadoId') cooperadoId: string) {
     return this.ocorrenciasService.findByCooperado(cooperadoId);

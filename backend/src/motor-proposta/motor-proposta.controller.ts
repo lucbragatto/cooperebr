@@ -9,6 +9,7 @@ import { WhatsappSenderService } from '../whatsapp/whatsapp-sender.service';
 import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { TenantResource } from '../auth/tenant-resource.decorator';
 import { CalcularPropostaDto } from './dto/calcular-proposta.dto';
 import { AceitarPropostaDto } from './dto/aceitar-proposta.dto';
 import { ConfiguracaoMotorDto } from './dto/configuracao-motor.dto';
@@ -83,6 +84,10 @@ export class MotorPropostaController {
     return this.service.editarProposta(id, body, req.user?.cooperativaId);
   }
 
+  // Corretiva IDOR 21/07 Onda 1 item 9c — guarda posse da proposta no tenant.
+  // Guard 404 cross-tenant automático (SUPER_ADMIN bypass). HTML vaza dados
+  // pessoais (nome+CPF+consumo) se acessado por outro tenant.
+  @TenantResource({ model: 'propostaCooperado' })
   @Get('proposta/:id/html')
   async propostaHtml(@Param('id') id: string, @Res() res: Response) {
     const html = await this.propostaPdf.gerarHtml(id);

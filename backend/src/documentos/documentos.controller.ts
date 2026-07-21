@@ -7,12 +7,18 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { DocumentosService } from './documentos.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { TenantResource } from '../auth/tenant-resource.decorator';
 
 @Controller('documentos')
 @Roles(PerfilUsuario.ADMIN, PerfilUsuario.OPERADOR)
 export class DocumentosController {
   constructor(private readonly documentosService: DocumentosService) {}
 
+  // Corretiva IDOR 21/07 Onda 1 item 7 — guarda posse do cooperado no tenant
+  // do JWT (SUPER_ADMIN bypass automático). Corta vazamento de RG/CNH/URLs
+  // cross-tenant. Service.findByCooperado permanece igual — o guard mata o
+  // request antes de chegar.
+  @TenantResource({ model: 'cooperado', idParam: 'cooperadoId' })
   @Get('cooperado/:cooperadoId')
   findByCooperado(@Param('cooperadoId') cooperadoId: string) {
     return this.documentosService.findByCooperado(cooperadoId);

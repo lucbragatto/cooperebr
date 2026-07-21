@@ -5,6 +5,7 @@ import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { CreateUsinaDto } from './dto/create-usina.dto';
 import { UpdateUsinaDto } from './dto/update-usina.dto';
+import { TenantResource } from '../auth/tenant-resource.decorator';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
 
@@ -27,25 +28,34 @@ export class UsinasController {
     return this.usinasService.findDisponiveis(ucId);
   }
 
+  // Corretiva IDOR 21/07 Onda 1 item 5 — @TenantResource nos 4 handlers
+  // analíticos de :id de usina (o guard 404 cross-tenant automático). Corta
+  // vazamento de nome+CPF via /distribuicao e leitura cross-tenant de
+  // saúde/ocupacao/lista-concessionaria. SUPER_ADMIN bypass automático.
+  // 11 usinas no banco, 0 com tenant nulo — zero regressão esperada.
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @TenantResource({ model: 'usina' })
   @Get(':id/saude-financeira')
   saudeFinanceira(@Param('id') id: string) {
     return this.analiticoService.saudeFinanceira(id);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @TenantResource({ model: 'usina' })
   @Get(':id/ocupacao')
   ocupacao(@Param('id') id: string) {
     return this.analiticoService.ocupacao(id);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO)
+  @TenantResource({ model: 'usina' })
   @Get(':id/distribuicao')
   distribuicao(@Param('id') id: string) {
     return this.usinasService.distribuicaoCreditos(id);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
+  @TenantResource({ model: 'usina' })
   @Get(':id/lista-concessionaria')
   listaConcessionaria(@Param('id') id: string) {
     return this.usinasService.gerarListaConcessionaria(id);

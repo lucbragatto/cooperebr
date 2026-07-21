@@ -13,7 +13,12 @@ export interface CalcularPixExcedenteDto {
   aliquotaCOFINS?: number;
   pixChave?: string;
   pixTipo?: string;
-  cooperativaId?: string;
+  /**
+   * Corretiva IDOR 21/07 Onda 1 item 1 — null = SUPER_ADMIN bypass INTENCIONAL
+   * (cross-tenant), resolvido no controller via resolveTenantIdFromReq.
+   * undefined = ausente. string = tenant específico do JWT.
+   */
+  cooperativaId?: string | null;
 }
 
 export interface ConfigImpostosDto {
@@ -50,8 +55,15 @@ export class PixExcedenteService {
     let pixTipo = dto.pixTipo;
 
     if (dto.cooperadoId && !pixChave) {
-      const cooperado = await this.prisma.cooperado.findUnique({
-        where: { id: dto.cooperadoId },
+      // Corretiva IDOR 21/07 Onda 1 item 1 — filtro de tenant ANTES de ler
+      // pixChave. dto.cooperativaId veio do resolveTenantIdFromReq no controller:
+      //   - string → filtra (ADMIN/OPERADOR de A NÃO vê pixChave de B)
+      //   - null   → SUPER_ADMIN bypass (cross-tenant intencional)
+      // Não-SUPER_ADMIN sem cooperativaId já foi bloqueado com 403 no controller.
+      const cooperado = await this.prisma.cooperado.findFirst({
+        where: dto.cooperativaId
+          ? { id: dto.cooperadoId, cooperativaId: dto.cooperativaId }
+          : { id: dto.cooperadoId },
         select: { id: true, nomeCompleto: true, pixChave: true, pixTipo: true },
       });
       if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
@@ -60,8 +72,13 @@ export class PixExcedenteService {
     }
 
     if (dto.condominioId && !pixChave) {
-      const cond = await this.prisma.condominio.findUnique({
-        where: { id: dto.condominioId },
+      // Idem cooperado — filtra Condominio por cooperativaId direto (schema:2543,
+      // nullable mas 100% preenchido na base atual). Não mexe no eixo
+      // administradoraId (schema:2551) — os dois eixos coexistem no schema.
+      const cond = await this.prisma.condominio.findFirst({
+        where: dto.cooperativaId
+          ? { id: dto.condominioId, cooperativaId: dto.cooperativaId }
+          : { id: dto.condominioId },
         select: { excedentePixChave: true, excedentePixTipo: true },
       });
       if (!cond) throw new NotFoundException('Condomínio não encontrado');

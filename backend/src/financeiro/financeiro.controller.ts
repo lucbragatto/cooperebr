@@ -4,6 +4,7 @@ import {
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
 import { TenantResource } from '../auth/tenant-resource.decorator';
+import { resolveTenantIdFromReq } from '../auth/tenant-resolver';
 import { AuditLog } from '../audit/audit-log.decorator';
 import { PlanoContasService } from './plano-contas.service';
 import { ClassificarContaDto } from './dto/classificar-conta.dto';
@@ -255,9 +256,15 @@ export class FinanceiroController {
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Post('pix-excedente')
   processarPixExcedente(@Body() body: any, @Req() req: any) {
+    // Corretiva IDOR 21/07 Onda 1 item 1 — decisão fail-CLOSED por perfil.
+    // SUPER_ADMIN pode passar cooperativaId no body (cross-tenant intencional);
+    // outros perfis SEMPRE o do JWT. Se não-SUPER_ADMIN sem cooperativaId no
+    // token → 403 (nunca query sem filtro). Corta leitura de pixChave
+    // cross-tenant em pix-excedente.service.ts (LGPD).
+    const cooperativaId = resolveTenantIdFromReq(req, body?.cooperativaId);
     return this.pixExcedenteService.processarPixExcedente({
       ...body,
-      cooperativaId: body.cooperativaId ?? req.user?.cooperativaId,
+      cooperativaId,
     });
   }
 
