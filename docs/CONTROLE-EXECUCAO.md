@@ -79,6 +79,44 @@
 
 ---
 
+## ONDE PARAMOS — 2026-07-21 (Code + Luciano operacional — ROTA B concluída: Achado 3 fechado; **Corretiva Mensageria WA 9/9 provada end-to-end**)
+
+**Escopo:** sessão operacional 1h30 conduzida passo a passo — orquestrador prescreveu, Luciano executou no shell (regra_nao_trabalhar_paralelo_com_code). Bloco 3 do runbook `restart-coordenado-achado-3-4-8.md` executado + smoke Bloco 5 completo. **Zero commit de código** (rotação é operacional, `.env` não vai pro repo). 1 commit `docs(sessao)` só (este fechamento).
+
+### Achado 3 fechado (último aberto da corretiva mensageria)
+- **Rotação `WHATSAPP_WEBHOOK_SECRET`** — 64 chars, 48 bytes `RandomNumberGenerator` cript, base64 URL-safe. Script one-shot com travas fail-safe (aborta sem escrita se padrão não encontrado nos `.env`). Backup em `%TEMP%\cooperebr-env-bkp-750686477\`.
+- **Consolidação `COOPERTOKEN_QR_SECRET`** (Achado 9) — 3 linhas → 1, mantida a de 44 chars (a que rodava). Comportamento-zero.
+- **Strip `?secret=` do `BACKEND_WEBHOOK_URL`** (wa-service/.env) — fecha vazamento em log de startup. Warn `[WA-WEBHOOK] BACKEND_WEBHOOK_URL do .env tinha ?secret=` sumiu no boot novo.
+- **Igualdade estrutural dos 2 `.env`** verificada (length=64 idêntica, sem ecoar valor).
+- **Restart coordenado com ordem corrigida**: bot parado ANTES do backend (evita janela de 401 silencioso entre backend-novo × bot-velho — Meta enfileira mensagens e entrega na reconexão).
+
+### Smokes (Bloco 5) — todos passaram
+1. `/status = connected` ✅
+2. Webhook SEM header → 401 ✅
+3. Webhook COM header novo → **HTTP 201 `{ok:true}`** ✅
+4. Warn deprecated ausente no boot novo ✅
+5a. Round-trip emissor (`/send-message → 27981341348` HTTP 200 + recebido) ✅
+5b. **Round-trip inbound REAL** ✅ **prova ouro** — Luciano mandou mensagem no WA, bot RESPONDEU com menu completo. Pra bot ter respondido, o webhook autenticou com secret novo (401 mataria em silêncio). Cadeia inteira de produção provada: celular → Meta → Baileys → `POST /whatsapp/webhook-incoming` → `processarMensagem` → resposta. **Não está só "connected" — está SERVINDO cooperado.**
+
+### Débito novo — `D-novo-RUNBOOK-CLIPBOARD-CONTAMINACAO` (P3)
+Smoke 3 deu 401 por 20min mesmo com rotação correta aplicada. Investigação: pm2 env cache, BOM, dotenv/ConfigModule ausentes, delete+start — tudo aparentemente sem efeito. **Causa raiz revelada por debug do próprio `$secret`**: `Get-Clipboard` retornava array de 10 linhas (1704 bytes UTF-8) com em-dashes `U+2014` + `ç`/`õ` — texto PT-BR residual da própria conversa que o clipboard-monitor sobrescreveu. Cada request enviava lixo como header. **Fix aplicado no runbook mesmo commit**: Bloco 5 troca `Get-Clipboard` por `Select-String` no `.env` (fonte-de-verdade, imutável entre passos).
+
+### Observação lateral (não catalogado como débito)
+Backend NÃO tem `dotenv.config()` explícito no `main.ts` nem `ConfigModule.forRoot()`. `pm2-start.js` só faz `require('./dist/src/main')`. `.env` carrega por **efeito colateral do Prisma** (`new PrismaClient()` chama `dotenv.config()` internamente). Funcionou (Smoke 3 verde), mas frágil — depende de ordem de import. Simetria com wa-service (`node_args: '--env-file=.env'`) seria mais robusta. Nenhum sintoma ativo — futura melhoria.
+
+### Marco consolidado
+**CORRETIVA MENSAGERIA WHATSAPP — 9/9 ACHADOS FECHADOS E PROVADOS** (arco 16/07 → 21/07). Começou como "migrar 1 secret de query pra header" e fechou em 9 — os 3 piores (OTP/PIN em claro; Codex com escrita no repo; hardcode de versão + zumbi WhatsApp) descobertos pela **varredura de propagação**, não pela auditoria original. **Nenhum cooperado exposto**. Bônus: bot ressuscitado (mudo 3 dias). Runbook `restart-coordenado-achado-3-4-8` validado em produção — canônico agora.
+
+### Pendências não-bloqueantes
+- **QR round-trip funcional** (Achado 9): estrutural OK (1 linha, 44 chars, comportamento-zero garantido). Funcional pendente — testar quando Luciano tiver login cooperado ativo.
+- **Bloco 6 — monitor 24h** (agendar pra 22/07): `pm2 logs cooperebr-backend --lines 500 --nostream | Select-String "WA-WEBHOOK.*deprecated"`. Zero ocorrências → agenda cleanup do fallback query no receptor.
+- **Backup `.env`** em `%TEMP%\cooperebr-env-bkp-750686477\` — janela de rollback aberta 24h.
+- **`Set-Clipboard -Value ""`** — higiene pós-sessão.
+
+Detalhe: `docs/sessoes/2026-07-21-rota-b-achado-3-rotacao-secret.md`.
+
+---
+
 ## ONDE PARAMOS — 2026-07-20 (Code — Corretiva Mensageria WA 9/9 + Asaas Webhook FASE 2 + 3 blocos laterais + **DELTA noite: ROTA B executada + bot WA ressuscitado**)
 
 **Arco:** 4 dias (2026-07-16 pós-fechamento anterior → 2026-07-20). **20 commits em `main`** todos pushados (`57e0285..ad3415c`). Fechamento anterior (`f93f365`) documenta 18 commits diurnos; DELTA noite adicionou 2 (`82c9ebc` + `ad3415c`).
@@ -4123,31 +4161,43 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Se aparecer prompt de data-loss, PARA — regra CLAUDE.md inegociável.
 
 4. `pm2 list` deve mostrar `cooperebr-whatsapp` online + `curl http://localhost:3002/status`
-   deve retornar `{"status":"connected","qrCode":null}`. **Smoke emissor JÁ
-   VALIDADO ao vivo em 20/07 22:28 BRT** (POST `/send-message` pro whitelist
-   `27981341348` → HTTP 200 + Luciano confirmou recebimento no celular). Se
-   `/status` voltar `failed` no boot, aplicar runbook de cleanup zumbi:
-   `pm2 delete cooperebr-whatsapp` + `Stop-Process -Id <PID de :3002> -Force`
-   + `pm2 start C:\Users\Luciano\cooperebr\ecosystem.config.cjs --only
+   deve retornar `{"status":"connected","qrCode":null}`. **Cadeia WA inteira
+   PROVADA ao vivo em 21/07 manhã** — round-trip inbound REAL: Luciano mandou
+   mensagem no WA, bot respondeu com menu completo. Se `/status` voltar
+   `failed` no boot, aplicar runbook de cleanup zumbi: `pm2 delete
+   cooperebr-whatsapp` + `Stop-Process -Id <PID de :3002> -Force` + `pm2
+   start C:\Users\Luciano\cooperebr\ecosystem.config.cjs --only
    cooperebr-whatsapp` + `pm2 save` (evita re-diagnóstico do zumbi já
    catalogado em `D-novo-WA-ZUMBI-PORTA-3002`).
 
-PASSO 1 — Frase COMANDANTE (escolha do Luciano entre 2 rotas):
+5. **Bloco 6 monitor pendente (agendar pra 22/07 ou depois)**:
+   `pm2 logs cooperebr-backend --lines 500 --nostream | Select-String "WA-WEBHOOK.*deprecated"`.
+   Se ZERO ocorrências no ciclo 24h após 21/07 07:46:23 BRT, agendar cleanup
+   do fallback query `?secret=` no receptor (`backend/src/whatsapp/whatsapp-fatura.controller.ts:100-111`)
+   — retirar suporte a query + warn. Isso fecha a compat window do Achado 3.
 
-🟢 **20/07/2026 (noite) — DELTA ROTA B EXECUTADA + smoke emissor validado**:
-bot WhatsApp ressuscitado após 3 dias mudo (17/07→20/07) + Codex removido do
-ACL do repo (Achado 8) + `auth_info` tightened (Achado 4) + envio real pro
-whitelist `27981341348` confirmado no celular. **20 commits pushados no arco**
-(`57e0285..ad3415c`); os 2 novos do DELTA: `82c9ebc` (fix versão WA via
-`fetchLatestBaileysVersion`) + `ad3415c` (débitos `D-novo-WA-ZUMBI-PORTA-3002`
-+ `D-novo-WA-LOG-CHAVES-SESSAO`). Detalhe consolidado:
-`docs/sessoes/2026-07-20-corretiva-mensageria-e-asaas-fase2.md` (seção DELTA
-+ seção Smoke pós-fechamento).
+PASSO 1 — Frase COMANDANTE (ROTA A é a próxima; ROTA B fechada 21/07):
 
-**Bloco 3 do runbook `restart-coordenado-achado-3-4-8.md` é o ÚNICO achado
-de segurança da mensageria ainda aberto** — Blocos 8 e 4 já feitos.
+🟢 **21/07/2026 (manhã) — CORRETIVA MENSAGERIA WA 9/9 PROVADA END-TO-END**:
+Achado 3 rotacionado + smoke inbound real (bot respondeu ao Luciano com menu
+completo). Arco fechado 16/07 → 21/07. Detalhe consolidado:
+`docs/sessoes/2026-07-21-rota-b-achado-3-rotacao-secret.md`.
 
-Ambas as ROTAS abaixo são INDEPENDENTES — escolha por prioridade + energia:
+**Próxima frente: ROTA A — Tarefa 4 (Asaas emissão idempotência).**
+
+═══ PRÉ-CHECK OBRIGATÓRIO ANTES DE COMEÇAR ═══
+
+Confirmar em `/dashboard/configuracoes/asaas` (ou via `SELECT` no banco em
+`gatewayPagamentoConfig` do tenant CoopereBR) se o gateway está em **SANDBOX**
+ou **PRODUÇÃO**. Muda a urgência:
+
+- **SANDBOX**: fix-forward puro, auditoria já confirmou 0 duplicatas hoje.
+  Prioridade média — agenda quando der.
+- **PRODUÇÃO**: mesmo defeito cobra dinheiro real de cooperado a cada
+  double-click da UI. Prioridade alta — agendar próximas 48h + comunicar
+  cooperados afetados se houver duplicata histórica.
+
+═══ ROTA A — Tarefa 4 (Asaas emissão idempotência + retry unificado) ═══
 
 ═══ ROTA A — Tarefa 4 (Asaas emissão idempotência + retry unificado) — CÓDIGO ═══
 
@@ -4189,68 +4239,29 @@ cooperativaId do JWT. Contatos-teste 27981341348 / lucbragatto+suffix@gmail.com.
 Rodar `cooperebr-financeiro-token-reviewer` E `cooperebr-multitenant-reviewer`
 no fim. SEM push sem OK explícito.
 
-═══ ROTA B (restante) — Achado 3 pendente da Mensageria WA (LUCIANO RODA, não Code) ═══
+═══ ROTA B — FECHADA 21/07 (Achado 3 rotacionado + smoke inbound real OK) ═══
 
-Runbook: `docs/seguranca/restart-coordenado-achado-3-4-8.md`. **Blocos 8 e 4
-JÁ EXECUTADOS no DELTA de 20/07 noite — não repetir.** Bot WA reconectado
-após runbook adicional (cleanup zumbi PID 16048 + `fetchLatestBaileysVersion`
-no commit `82c9ebc`); confirmado 2× com `/status = "connected"`.
+Não retomar. Documentação histórica em
+`docs/sessoes/2026-07-21-rota-b-achado-3-rotacao-secret.md`. Runbook
+`docs/seguranca/restart-coordenado-achado-3-4-8.md` atualizado com fix do
+`Get-Clipboard` (D-novo-RUNBOOK-CLIPBOARD-CONTAMINACAO). Único resíduo é
+o Bloco 6 (monitor 24h) — ver PASSO 0 item 5 acima.
 
-**Só falta o Bloco 3 do runbook** (rotação de secret + consolidação `.env`):
+═══ Débitos abertos pra sessões dedicadas futuras ═══
 
-- Gerar `WHATSAPP_WEBHOOK_SECRET` novo (`RandomNumberGenerator` no PowerShell,
-  clipboard-only, NÃO colar valor em report).
-- Editar OS DOIS `.env` (backend + wa-service) com o valor novo.
-- Limpar `?secret=` embutido no `BACKEND_WEBHOOK_URL` do `.env` do wa-service
-  (defense-in-depth do Achado 3 — o warn `⚠️ BACKEND_WEBHOOK_URL do .env tinha
-  ?secret= embutido — REMOVIDO em memória` está aparecendo a cada boot).
-- Consolidar `COOPERTOKEN_QR_SECRET` (Achado 9): apagar linhas 73 + 75 do
-  `backend/.env`, manter linha 76 (a ativa em runtime — comportamento-zero,
-  o backend já usa ela).
-- Rebuild backend (`pm2 stop cooperebr-backend; cd backend; npm run build;
-  pm2 restart cooperebr-backend`) + `pm2 restart cooperebr-whatsapp` (Baileys
-  reconecta sem QR novo).
-
-**Bloco 5 (smoke pós-restart, obrigatório)** — 5 sub-testes:
-- WA-service `/status = "connected"`.
-- Webhook: POST sem header → 401; POST com header `x-whatsapp-secret: <novo>` → 200.
-- Warn `[WA-WEBHOOK] Secret via query string (deprecated)` AUSENTE do log
-  (comprova que emissor migrou pro header e `.env` está limpo).
-- **Igualdade dos 2 `.env`** — comparação estrutural sem ecoar valor
-  (se divergem, rotação vazou pela metade, bot fica mudo silenciosamente).
-- **Round-trip real com `27981341348`** — envia mensagem manual, grep
-  `pm2 logs cooperebr-backend` por `"Mensagem recebida"` (não
-  `UnauthorizedException`). Prova cadeia inteira emissor↔receptor em runtime.
-- **QR round-trip funcional** (Achado 9) — login como cooperado → POST
-  `/cooper-token/gerar-qr-pagamento` → `node -e "require('dotenv').config();
-  jwt.verify(token, process.env.COOPERTOKEN_QR_SECRET)"`. Se valida, runtime
-  e `.env` batem exatamente.
-
-**Bloco 6 (monitor 24h pós-restart)** — grep `pm2 logs cooperebr-backend`
-por `"WA-WEBHOOK.*deprecated"`; se zero ocorrências no ciclo, agendar
-cleanup do fallback query no receptor (retirar suporte + warn).
-
-═══ COMO ESCOLHER ═══
-
-- **CÓDIGO** (energia pra sessão financeira, 4-8h com revisor) → **ROTA A** (Tarefa 4).
-- **MANUTENÇÃO OPERACIONAL** (janela pra `.env` com atenção total, 15-25min) →
-  **ROTA B restante** (Bloco 3 do runbook + smokes 5 + monitor 6).
-- Menor risco financeiro-atual primeiro: **ROTA A** (bug emissão dupla ativo,
-  mesmo com 0 casos hoje — próxima geração de cobranças pode duplicar).
-- Fechar a superfície de exposição de mensageria de vez: **ROTA B restante**
-  (Achado 3 é o último aberto da mensageria; 8+4 já feitos, bot conectado).
-
-**Débitos abertos pra sessões dedicadas futuras** (P2, não bloqueiam nenhuma
-das rotas): `D-novo-CT-MLM-ATOMICO` (indicacoes atômico + cron reconciliação),
+Nenhum bloqueia ROTA A. Grupo P2 mensageria/token/webhook:
+`D-novo-CT-MLM-ATOMICO` (indicacoes atômico + cron reconciliação),
 `D-novo-WEBHOOK-PJ-SLOT-UNICO` (migrar listener compra-PJ pro WebhookEvent),
 `D-novo-CT3-CRON-RECONCILIACAO` (cron Cobranca-PAGO-sem-LancamentoContabil),
 `D-novo-MIGRATIONS-ABANDONADAS` (reconciliar `backend/prisma/migrations/` —
-JAMAIS `migrate dev` casual), **`D-novo-WA-ZUMBI-PORTA-3002` NOVO** (`pm2
+JAMAIS `migrate dev` casual), `D-novo-WA-ZUMBI-PORTA-3002` (`pm2
 stop/restart` deixa órfão em Windows — investigar SIGKILL/SIGTERM; guard
-de startup no wa-service quando `:3002` já ocupado), **`D-novo-WA-LOG-CHAVES-SESSAO`
-NOVO** (pino verboso dumpa `privKey`/`rootKey` no `wa-out.log` — subir logger
-`trace`→`info`), Tarefas 6/7/8 (email OCR move seletivo, sender WA/email status
-inspection, fatura OCR schema zod).
+de startup no wa-service quando `:3002` já ocupado), `D-novo-WA-LOG-CHAVES-SESSAO`
+(pino verboso dumpa `privKey`/`rootKey` no `wa-out.log` — subir logger
+`trace`→`info`), **`D-novo-RUNBOOK-CLIPBOARD-CONTAMINACAO` (NOVO — P3)**
+runbook fix já aplicado, sem tarefa restante além de propagar padrão pra
+runbooks futuros, Tarefas 6/7/8 (email OCR move seletivo, sender WA/email
+status inspection, fatura OCR schema zod).
 ```
 
 **Frente 2 — Vitrines Mínimas + Pipeline de Captação** (manhã+tarde, 7 commits):

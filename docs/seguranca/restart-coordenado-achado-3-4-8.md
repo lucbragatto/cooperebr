@@ -311,11 +311,24 @@ try {
 }
 
 # (b) Header novo aceita → 200
-$novo = Get-Clipboard
+#
+# ⚠️  NAO USAR Get-Clipboard — ver D-novo-RUNBOOK-CLIPBOARD-CONTAMINACAO (21/07).
+# Qualquer Ctrl+C acidental do humano no meio do runbook (selecao no VS Code,
+# copiar do terminal, etc) sobrescreve o clipboard silenciosamente. Custou 20min
+# de falso-negativo em 21/07 — cada request mandava ~1700 bytes de texto PT-BR
+# como header, backend legitimamente devolvia 401. Fonte-de-verdade eh o .env
+# no disco (o mesmo que o backend/wa-service leem).
+$novo = (Select-String -Path 'C:\Users\Luciano\cooperebr\backend\.env' `
+         -Pattern '^WHATSAPP_WEBHOOK_SECRET=(.+)$' | Select-Object -First 1).Matches.Groups[1].Value
+if (-not $novo -or $novo.Length -lt 20) {
+  Write-Host "FALHA: nao consegui ler WHATSAPP_WEBHOOK_SECRET do backend/.env — abortar smoke"
+  return
+}
 $r = Invoke-RestMethod -Method Post -Uri http://localhost:3000/whatsapp/webhook-incoming `
      -Headers @{ 'x-whatsapp-secret' = $novo } `
      -Body $body -ContentType 'application/json'
 Write-Host "OK 200: $($r | ConvertTo-Json)"
+$novo = $null  # nao deixar o valor pendurado na sessao
 
 # (c) Confirmar que o warn de deprecacao NAO apareceu (o request acima usou
 # header, nao query). Se aparecer aqui, o proprio smoke esta cain do no
