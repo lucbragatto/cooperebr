@@ -4122,15 +4122,27 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    NÃO rodar `prisma db push` nem `migrate dev` sem sprint com delta novo.
    Se aparecer prompt de data-loss, PARA — regra CLAUDE.md inegociável.
 
+4. `pm2 list` deve mostrar `cooperebr-whatsapp` online + `curl http://localhost:3002/status`
+   deve retornar `{"status":"connected","qrCode":null}`. **Smoke emissor JÁ
+   VALIDADO ao vivo em 20/07 22:28 BRT** (POST `/send-message` pro whitelist
+   `27981341348` → HTTP 200 + Luciano confirmou recebimento no celular). Se
+   `/status` voltar `failed` no boot, aplicar runbook de cleanup zumbi:
+   `pm2 delete cooperebr-whatsapp` + `Stop-Process -Id <PID de :3002> -Force`
+   + `pm2 start C:\Users\Luciano\cooperebr\ecosystem.config.cjs --only
+   cooperebr-whatsapp` + `pm2 save` (evita re-diagnóstico do zumbi já
+   catalogado em `D-novo-WA-ZUMBI-PORTA-3002`).
+
 PASSO 1 — Frase COMANDANTE (escolha do Luciano entre 2 rotas):
 
-🟢 **20/07/2026 (noite) — DELTA ROTA B EXECUTADA**: bot WhatsApp ressuscitado
-após 3 dias mudo (17/07→20/07) + Codex removido do ACL do repo (Achado 8) +
-`auth_info` tightened (Achado 4). **20 commits pushados no arco**
+🟢 **20/07/2026 (noite) — DELTA ROTA B EXECUTADA + smoke emissor validado**:
+bot WhatsApp ressuscitado após 3 dias mudo (17/07→20/07) + Codex removido do
+ACL do repo (Achado 8) + `auth_info` tightened (Achado 4) + envio real pro
+whitelist `27981341348` confirmado no celular. **20 commits pushados no arco**
 (`57e0285..ad3415c`); os 2 novos do DELTA: `82c9ebc` (fix versão WA via
 `fetchLatestBaileysVersion`) + `ad3415c` (débitos `D-novo-WA-ZUMBI-PORTA-3002`
 + `D-novo-WA-LOG-CHAVES-SESSAO`). Detalhe consolidado:
-`docs/sessoes/2026-07-20-corretiva-mensageria-e-asaas-fase2.md` (seção DELTA).
+`docs/sessoes/2026-07-20-corretiva-mensageria-e-asaas-fase2.md` (seção DELTA
++ seção Smoke pós-fechamento).
 
 **Bloco 3 do runbook `restart-coordenado-achado-3-4-8.md` é o ÚNICO achado
 de segurança da mensageria ainda aberto** — Blocos 8 e 4 já feitos.

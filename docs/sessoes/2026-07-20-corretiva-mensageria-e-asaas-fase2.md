@@ -328,3 +328,27 @@ Rotação de `WHATSAPP_WEBHOOK_SECRET` + limpeza do `?secret=` embutido no `BACK
 **Diagnóstico foi log → código → processos, NÃO re-pareamento às cegas.** A intuição inicial (sessão morta do lado Meta, requer QR novo) teria falhado — o problema era competição local por `auth_info` + hardcode de versão. Só ler `Get-NetTCPConnection`/`netstat` no ângulo certo (múltiplos `OwningProcess` no mesmo porto :3002) revelou o zumbi de 3 dias atrás.
 
 **Runbook `restart-coordenado-achado-3-4-8` + cleanup de zumbi validado 2× consecutivas → candidato a canônico no CLAUDE.md seção PM2** (fazer junto do tratamento futuro do `D-novo-WA-ZUMBI-PORTA-3002`).
+
+### Smoke pós-fechamento — round-trip emissor validado ao vivo (22:28 BRT)
+
+Após o commit `78ab9bc` (fechamento canônico), Luciano pediu smoke real de envio pro número whitelist `27981341348` (regra `regra_contato_teste_impreterivel` 14/05). Executado via `node -e` dentro de `whatsapp-service/` (secret carregado do `.env` sem eco no shell — regra `regra_secrets_nao_memorizar` 26/05):
+
+```
+POST http://127.0.0.1:3002/send-message
+Header: x-whatsapp-secret: <redacted>
+Body: { "to": "27981341348", "text": "Round-trip test — corretiva WA 20/07 ..." }
+
+Response: HTTP 200 { "ok": true }
+```
+
+Luciano confirmou recebimento no celular. **Metade emissor da cadeia round-trip validada em produção real** (Bloco 5 sub-teste do runbook — smoke emissor, não a metade inbound que ainda depende de resposta manual do celular).
+
+O que o `200` prova concretamente:
+- Header `x-whatsapp-secret` autenticou no middleware (senão 401 — Achado 3 no wa-service `d5e547c` funcionando).
+- `connectionStatus === 'connected'` no boot atual (senão 503 ou `{ok:true, buffered:true}`).
+- `sock.sendMessage()` não threw — Baileys aceitou o payload e enviou ao Meta com a versão nova (`2.3000.1035194821`) do commit `82c9ebc`.
+- Recebimento físico no aparelho fecha a cadeia emissor → Meta → celular.
+
+Metade inbound (celular → Meta → wa-service → `POST /whatsapp/webhook-incoming` no backend) fica pendente pra próxima sessão — basta Luciano responder qualquer texto no WA que o log do backend loga `[WhatsappController] Mensagem recebida`. Não bloqueia o fechamento (o problema era emissor mudo, não receptor).
+
+Observação lateral registrada: o dump do `wa-out.log` durante o boot (22:26:51 BRT, imediatamente antes do smoke) mostra material Signal Protocol em texto claro (`privKey`, `rootKey`, `remoteIdentityKey`, `chainKey`, `ephemeralKeyPair`, `pendingPreKey`) — **evidência empírica ao vivo do débito `D-novo-WA-LOG-CHAVES-SESSAO`**. Não é hipótese; foi observado nos logs desta sessão. Reforça a prioridade P2 do débito.
