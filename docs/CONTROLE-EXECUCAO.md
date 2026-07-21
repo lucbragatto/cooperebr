@@ -81,6 +81,8 @@
 
 ## ONDE PARAMOS — 2026-07-21 (DIA DUPLO — MANHÃ: ROTA B Achado 3 fechado / TARDE: Corretiva IDOR 13 furos + SUSPECT em 3 ondas + 3.5)
 
+🟡 **Adenda 22/07 09:00** — 3 correções na FRASE DE RETOMADA aplicadas em `9ffd8ab` + adenda doc `docs/sessoes/2026-07-22-adenda-correcoes-frase-retomada.md`: (a) `curl localhost` → `Invoke-RestMethod 127.0.0.1` (IPv4 explícito, evita `::1` falso-negativo); (b) "re-parear pelo celular" substituído por escada de diagnóstico (`Get-NetTCPConnection` → restart → `pm2 logs` → só re-parear se `auth_info` foi apagado pelo `fs.rmSync` do próprio código); (c) Bloco 6 ROTA B checado 22/07 09:00 (0 fallback, 0 Unauthorized, 2 inbounds via header — janela 24h é formalidade). Débito novo `D-novo-WA-DIAGNOSTICO-REPAREAR-PRECIPITADO` (P3) catalogado.
+
 🟢 **21/07 — DIA DUPLO.**
 - **Manhã** (registrada abaixo): ROTA B fechada — Achado 3 rotacionado, **Corretiva Mensageria WA 9/9 provada end-to-end** (round-trip inbound real, bot respondeu com menu completo).
 - **Tarde** (nova seção abaixo, esta): **Corretiva IDOR/multi-tenant completa** — 13 furos + SUSPECT contratos em 3 ondas + 3.5 pós-revisão, **110/110 testes**, prova por mutação rodada em 3 pontos (Onda 1 pixChave, Onda 2 faturas gate, Onda 3 HS256 SEM pin), **6 commits pushados** (`cfe4813..f15439f`).
