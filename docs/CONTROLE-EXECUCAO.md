@@ -4196,21 +4196,41 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    NÃO rodar `prisma db push` nem `migrate dev` sem sprint com delta novo.
    Se aparecer prompt de data-loss, PARA — regra CLAUDE.md inegociável.
 
-4. `pm2 list` deve mostrar `cooperebr-whatsapp` online + `curl http://localhost:3002/status`
-   deve retornar `{"status":"connected","qrCode":null}`. **Cadeia WA inteira
-   PROVADA ao vivo em 21/07 manhã** — round-trip inbound REAL: Luciano mandou
-   mensagem no WA, bot respondeu com menu completo. Se `/status` voltar
-   `failed` no boot, aplicar runbook de cleanup zumbi: `pm2 delete
-   cooperebr-whatsapp` + `Stop-Process -Id <PID de :3002> -Force` + `pm2
-   start C:\Users\Luciano\cooperebr\ecosystem.config.cjs --only
-   cooperebr-whatsapp` + `pm2 save` (evita re-diagnóstico do zumbi já
-   catalogado em `D-novo-WA-ZUMBI-PORTA-3002`).
+4. Checar WA — **USAR PowerShell + IPv4 EXPLÍCITO** (curl/localhost resolve
+   IPv6 `::1` e dá exit 7 FALSO-NEGATIVO — o serviço escuta `127.0.0.1`
+   IPv4 puro): `Invoke-RestMethod http://127.0.0.1:3002/status`
+   Esperado: `{status:"connected", qrCode:null}`. Cadeia WA inteira PROVADA
+   ao vivo em 21/07 manhã (round-trip inbound REAL).
 
-5. **Bloco 6 monitor pendente (agendar pra 22/07 ou depois)**:
+   **Se voltar `failed` ou `awaiting_qr` — escada de diagnóstico**
+   (regra `D-novo-WA-DIAGNOSTICO-REPAREAR-PRECIPITADO` — "re-parear" foi
+   recomendado 4× esta semana e estava errado nas 4; causa real sempre foi
+   versão WA vencida ou processo zumbi):
+
+   a) Checar zumbi: `Get-NetTCPConnection -LocalPort 3002 -State Listen`
+      (mais de um processo, ou PID que o PM2 não conhece = zumbi; matar
+      antes de qualquer coisa).
+   b) `pm2 restart cooperebr-whatsapp` + `Start-Sleep 20` +
+      `Invoke-RestMethod http://127.0.0.1:3002/status` (o `failed` do
+      esgotamento de retry se resolve com restart, mesmo estado 20/07).
+   c) Ler o log: `pm2 logs cooperebr-whatsapp --lines 40 --nostream` —
+      procurar `405`, `Connection Failure`, ou `loggedOut` explícito.
+   d) SÓ re-parear pelo celular se o log mostrar `loggedOut/401` do
+      WhatsApp E o próprio código tiver apagado o `auth_info` (index.mjs
+      faz `fs.rmSync(AUTH_DIR)` em desconexão real). **Enquanto
+      `auth_info/` existir com `creds.json` gravado, re-parear é
+      desnecessário** — é `failed` de retry esgotado, não sessão perdida.
+
+5. **Bloco 6 monitor ROTA B — JÁ CHECADO 22/07 09:00 no log real**
+   (`C:\Users\Luciano\cooperebr\logs\nest-out.log`):
+   - usos do fallback `?secret=` hoje: **0**
+   - `Unauthorized` hoje: **0**
+   - inbounds reais pós-rotação das 07:46: **2** (07:51 e 08:05), ambos via header
+   Sinal limpo. Janela 24h que fecha 22/07 07:46 é formalidade — pode
+   retirar o fallback `?secret=` do receptor
+   (`backend/src/whatsapp/whatsapp-fatura.controller.ts:100-111`) quando der.
+   Comando pra re-conferir se quiser:
    `pm2 logs cooperebr-backend --lines 500 --nostream | Select-String "WA-WEBHOOK.*deprecated"`.
-   Se ZERO ocorrências no ciclo 24h após 21/07 07:46:23 BRT, agendar cleanup
-   do fallback query `?secret=` no receptor (`backend/src/whatsapp/whatsapp-fatura.controller.ts:100-111`)
-   — retirar suporte a query + warn. Isso fecha a compat window do Achado 3.
 
 PASSO 1 — Frase COMANDANTE (Corretiva IDOR + ROTA B FECHADAS 21/07; próxima frente = Tarefa 4):
 
