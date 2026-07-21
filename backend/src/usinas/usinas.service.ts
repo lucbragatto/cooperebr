@@ -25,9 +25,17 @@ export class UsinasService {
   /**
    * Retorna usinas da mesma distribuidora da UC informada, com capacidade disponível,
    * ordenadas por % de ocupação crescente.
+   *
+   * Corretiva IDOR 21/07 Onda 2 item 6 — cooperativaIdJwt=null = SUPER_ADMIN
+   * bypass; string = valida UC no tenant do caller via cooperado.cooperativaId
+   * (o UC direto tem 19 NULLs + 2 drifts, ver D-novo-UC-TENANT-DRIFT).
    */
-  async findDisponiveis(ucId: string) {
-    const uc = await this.prisma.uc.findUnique({ where: { id: ucId } });
+  async findDisponiveis(ucId: string, cooperativaIdJwt: string | null) {
+    const uc = await this.prisma.uc.findFirst({
+      where: cooperativaIdJwt
+        ? { id: ucId, cooperado: { cooperativaId: cooperativaIdJwt } }
+        : { id: ucId },
+    });
     if (!uc) throw new NotFoundException('UC não encontrada');
 
     const where: any = { capacidadeKwh: { not: null } };

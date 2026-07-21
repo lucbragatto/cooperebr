@@ -477,6 +477,8 @@ export class CooperadosController {
     }
 
     // 5. Motor OK → agora criar UC (sem risco de órfã)
+    // Corretiva IDOR 21/07 Onda 2 item 8c — passa cooperativaId do proprio
+    // cooperado (ja validado nas linhas 406-408) pro service confirmar tenant.
     const uc = await this.ucsService.create({
       numero: numeroUC.trim(),
       endereco: dadosOcr.enderecoInstalacao || '',
@@ -486,7 +488,7 @@ export class CooperadosController {
       cep: dadosOcr.cep || undefined,
       bairro: dadosOcr.bairro || undefined,
       distribuidora: dadosOcr.distribuidora || undefined,
-    });
+    }, cooperativaId);
 
     return {
       ok: true,

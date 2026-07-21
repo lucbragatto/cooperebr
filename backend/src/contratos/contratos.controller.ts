@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Delete, Param, Body, Req } from '@nestjs/co
 import { ContratosService } from './contratos.service';
 import { Roles } from '../auth/roles.decorator';
 import { PerfilUsuario } from '../auth/perfil.enum';
+import { resolveTenantIdFromReq } from '../auth/tenant-resolver';
 import { CreateContratoDto } from './dto/create-contrato.dto';
 import { UpdateContratoDto } from './dto/update-contrato.dto';
 import { AuditLog } from '../audit/audit-log.decorator';
@@ -43,8 +44,11 @@ export class ContratosController {
   @AuditLog({ acao: 'contrato.criar', recurso: 'Contrato' })
   @Post()
   create(@Body() body: CreateContratoDto, @Req() req: any) {
-    // D-48.6: injeta cooperativaId do JWT — usina será filtrada por tenant.
-    return this.contratosService.create(body, req.user?.cooperativaId ?? null);
+    // Corretiva IDOR 21/07 Onda 2 SUSPECT — resolveTenantIdFromReq fail-CLOSED:
+    // SUPER_ADMIN pode passar body.cooperativaId (cross-tenant intencional);
+    // ADMIN/OPERADOR SEMPRE JWT; sem cooperativaId no token → 403.
+    const cooperativaId = resolveTenantIdFromReq(req, body.cooperativaId);
+    return this.contratosService.create(body, cooperativaId);
   }
 
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)

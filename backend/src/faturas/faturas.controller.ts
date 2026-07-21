@@ -86,7 +86,12 @@ export class FaturasController {
         throw new ForbiddenException('Cooperado só pode enviar fatura para si mesmo');
       }
     }
-    return this.faturasService.uploadConcessionaria(dto);
+    // Corretiva IDOR 21/07 Onda 2 item 4 — passar tenant do JWT (fail-CLOSED)
+    // pro service validar que o cooperado alvo pertence ao tenant do caller.
+    // Antes: service derivava cooperativaId do proprio alvo (ADMIN de A podia
+    // gravar fatura pra cooperado de B).
+    const cooperativaId = resolveTenantIdFromReq(req);
+    return this.faturasService.uploadConcessionaria(dto, cooperativaId);
   }
 
   @Post('documento')

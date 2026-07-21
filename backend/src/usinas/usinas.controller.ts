@@ -6,6 +6,7 @@ import { PerfilUsuario } from '../auth/perfil.enum';
 import { CreateUsinaDto } from './dto/create-usina.dto';
 import { UpdateUsinaDto } from './dto/update-usina.dto';
 import { TenantResource } from '../auth/tenant-resource.decorator';
+import { resolveTenantIdFromReq } from '../auth/tenant-resolver';
 
 const { SUPER_ADMIN, ADMIN, OPERADOR, COOPERADO } = PerfilUsuario;
 
@@ -22,10 +23,14 @@ export class UsinasController {
     return this.usinasService.findAll(distribuidora, req.user?.cooperativaId);
   }
 
+  // Corretiva IDOR 21/07 Onda 2 item 6 — Query param (nao @Param), fora do
+  // alcance do @TenantResource. Fix service-level: passa cooperativaId do JWT
+  // fail-CLOSED, service valida UC no tenant ANTES de listar usinas.
   @Roles(SUPER_ADMIN, ADMIN, OPERADOR)
   @Get('disponiveis')
-  findDisponiveis(@Query('ucId') ucId: string) {
-    return this.usinasService.findDisponiveis(ucId);
+  findDisponiveis(@Query('ucId') ucId: string, @Req() req: any) {
+    const cooperativaId = resolveTenantIdFromReq(req);
+    return this.usinasService.findDisponiveis(ucId, cooperativaId);
   }
 
   // Corretiva IDOR 21/07 Onda 1 item 5 — @TenantResource nos 4 handlers

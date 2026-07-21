@@ -151,12 +151,16 @@ export class EmailMonitorService {
               for (const anexo of email.anexos) {
                 try {
                   const base64 = anexo.content.toString('base64');
+                  // Corretiva IDOR 21/07 Onda 2 item 4 — passar cooperativaId do
+                  // scope (o email-monitor esta iterando emails DESTE tenant).
+                  // Defesa em profundidade: se cooperado identificado for de
+                  // outro tenant por qualquer razao, service throw Forbidden.
                   const resultUpload = await this.faturasService.uploadConcessionaria({
                     cooperadoId: cooperado.id,
                     arquivoBase64: base64,
                     tipoArquivo: 'pdf',
                     mesReferencia: this.extrairMesReferencia(email),
-                  });
+                  }, cooperativaId);
                   resultado.processados++;
 
                   // Ativar emailFaturasAtivo + notificar cooperado na primeira fatura
@@ -192,12 +196,13 @@ export class EmailMonitorService {
 
                   if (cooperado) {
                     // Encontrado via OCR → processar normalmente
+                    // Corretiva IDOR 21/07 Onda 2 item 4 — idem acima, passa cooperativaId do scope.
                     const resultUpload = await this.faturasService.uploadConcessionaria({
                       cooperadoId: cooperado.id,
                       arquivoBase64: base64,
                       tipoArquivo: 'pdf',
                       mesReferencia: this.extrairMesReferencia(email),
-                    });
+                    }, cooperativaId);
                     resultado.processados++;
 
                     // Ativar emailFaturasAtivo + notificar cooperado na primeira fatura

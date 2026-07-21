@@ -68,4 +68,13 @@ export class CreateContratoDto {
   @IsEnum(ModeloCobranca)
   @IsModeloNaoBloqueado()
   modeloCobrancaOverride?: ModeloCobranca | null;
+
+  /**
+   * Corretiva IDOR 21/07 Onda 2 SUSPECT — permite SUPER_ADMIN passar tenant
+   * no body pra criar contrato cross-tenant. ADMIN/OPERADOR/COOPERADO teem
+   * este campo IGNORADO pelo controller (resolveTenantIdFromReq usa o do JWT).
+   */
+  @IsOptional()
+  @IsString()
+  cooperativaId?: string;
 }

@@ -155,7 +155,16 @@ export class UcsService {
     });
   }
 
-  async create(data: CreateUcInput) {
+  async create(data: CreateUcInput, cooperativaIdJwt: string | null) {
+    // Corretiva IDOR 21/07 Onda 2 item 8c — valida cooperado no tenant ANTES
+    // de criar a UC. cooperativaIdJwt=null = SUPER_ADMIN bypass legitimo.
+    if (cooperativaIdJwt) {
+      const cooperado = await this.prisma.cooperado.findFirst({
+        where: { id: data.cooperadoId, cooperativaId: cooperativaIdJwt },
+        select: { id: true },
+      });
+      if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
+    }
     const numero = normalizarNumeroCanonico(data.numero);
     const distribuidora = validarDistribuidora(data.distribuidora);
     const numeroUC = data.numeroUC ? normalizarNumeroUC(data.numeroUC) : undefined;

@@ -471,7 +471,7 @@ export class FaturasService {
 
   // ── Upload Concessionária com análise automática ──────────────────────────
 
-  async uploadConcessionaria(dto: UploadConcessionariaDto) {
+  async uploadConcessionaria(dto: UploadConcessionariaDto, cooperativaIdJwt: string | null) {
     // 0. Buscar cooperativaId do cooperado (FATURA-02: multi-tenant isolation)
     const cooperadoUpload = await this.prisma.cooperado.findUnique({
       where: { id: dto.cooperadoId },
@@ -479,6 +479,12 @@ export class FaturasService {
     });
     if (!cooperadoUpload?.cooperativaId) throw new BadRequestException('Cooperado ou cooperativa não encontrado');
     const cooperativaIdUpload = cooperadoUpload.cooperativaId;
+    // Corretiva IDOR 21/07 Onda 2 item 4 — GATE cross-tenant no service (defesa
+    // em profundidade). cooperativaIdJwt=null = SUPER_ADMIN bypass legitimo;
+    // string = tenant do caller, tem que bater com o do cooperado alvo.
+    if (cooperativaIdJwt && cooperativaIdUpload !== cooperativaIdJwt) {
+      throw new ForbiddenException('Cooperado não pertence ao seu tenant');
+    }
 
     // 1. OCR
     const dadosExtraidos = await this.extrairDadosFatura(dto.arquivoBase64, dto.tipoArquivo);

@@ -95,6 +95,11 @@ export class MotorPropostaController {
     res.send(html);
   }
 
+  // Corretiva IDOR 21/07 Onda 2 item 2 — guarda posse da proposta no tenant.
+  // Guard 404 cross-tenant automático (SUPER_ADMIN bypass). Corta envio de PDF
+  // com dados pessoais (nome+CPF+consumo) por operador de outro tenant, com
+  // telefoneDestino escolhido pelo atacante.
+  @TenantResource({ model: 'propostaCooperado' })
   @Post('proposta/:id/enviar-pdf')
   async enviarPdf(
     @Param('id') id: string,

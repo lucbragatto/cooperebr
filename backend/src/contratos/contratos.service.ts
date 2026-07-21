@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, NotFoundException, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma.service';
@@ -176,11 +176,29 @@ export class ContratosService {
       kwhContratoAnual?: number;
       kwhContrato?: number;
       modeloCobrancaOverride?: string | null;
+      cooperativaId?: string | null;
     },
     cooperativaId?: string | null,
   ) {
     // Sprint 5: bloquear criação em modelos COMPENSADOS/DINAMICO
     await this.validarModeloNaoBloqueado(data.modeloCobrancaOverride, data.planoId);
+
+    // Corretiva IDOR 21/07 Onda 2 SUSPECT — valida cooperado + UC no tenant
+    // ANTES de qualquer efeito. cooperativaId=null = SUPER_ADMIN bypass; string
+    // = valida match. UC via cooperado.cooperativaId (drift Uc.cooperativaId
+    // catalogado D-novo-UC-TENANT-DRIFT).
+    if (cooperativaId) {
+      const cooperado = await this.prisma.cooperado.findFirst({
+        where: { id: data.cooperadoId, cooperativaId },
+        select: { id: true },
+      });
+      if (!cooperado) throw new NotFoundException('Cooperado não encontrado');
+      const uc = await this.prisma.uc.findFirst({
+        where: { id: data.ucId, cooperado: { cooperativaId } },
+        select: { id: true },
+      });
+      if (!uc) throw new NotFoundException('UC não encontrada');
+    }
 
     const contrato = await this.prisma.$transaction(async (tx) => {
       // 1. Validar: não permitir contrato ativo/lista_espera para mesma UC
@@ -295,10 +313,20 @@ export class ContratosService {
       }
 
       // 7. Criar contrato
-      const { kwhContratoAnual: _a, kwhContrato: _b, ...rest } = data;
+      // Corretiva IDOR 21/07 Onda 2 SUSPECT — injeta cooperativaId EXPLICITO
+      // no create. Nao confiar em ...rest (spread do body). Regra:
+      //   tenantFinal = cooperativaId do JWT ?? rest.cooperativaId (body do SUPER_ADMIN)
+      //   se ambos ausentes → 403 (nao deixa contrato orfao de tenant)
+      // Chave explicita vence o spread — a variavel corrige a colisao.
+      const { kwhContratoAnual: _a, kwhContrato: _b, cooperativaId: _c, ...rest } = data;
+      const tenantFinal = cooperativaId ?? _c ?? null;
+      if (!tenantFinal) {
+        throw new ForbiddenException('Contrato exige cooperativaId (do JWT ou body para SUPER_ADMIN)');
+      }
       return tx.contrato.create({
         data: {
           ...rest,
+          cooperativaId: tenantFinal,
           numero,
           dataInicio,
           dataFim,
