@@ -264,3 +264,67 @@ Fix aprovado da Fase 1 (documento futuro):
 - **regra_coerencia_sistemica_mapa_impacto** (10/06) — mapa de impacto entregue na Fase 1 antes de qualquer edit em Asaas + CooperToken.
 - **CLAUDE.md "db push em dev, NUNCA migrate"** — preservada e reforçada. Débito P2 registrado pra reconciliação futura de `migrations/`.
 - **feedback_analise_modelo_canonico_primeiro** — aplicada nos 2 revisores financeiros (7 achados totais entre os 2).
+
+---
+
+## DELTA pós-fechamento `f93f365` — ROTA B executada (Luciano rodou 2026-07-20 ~21:00-21:50)
+
+Fechamento anterior (`f93f365`) marcou ROTA B como "manutenção destrutiva pendente — Luciano roda quando quiser". Esta seção documenta a **execução** do runbook + descoberta lateral que ressuscitou o bot WA (mudo desde 17/07).
+
+### Achado 8 — Codex removido do ACL do repo inteiro
+
+- `icacls C:\Users\Luciano\cooperebr /remove:g "DESKTOP-89HGOKR\CodexSandboxUsers" /T` → OK.
+- SID órfão `S-1-5-21-3982730439-717413640-2430296156-1805928900`: `icacls /remove:g "*<SID>" /T` retornou **exit 52** (SID não resolve pra Name, `icacls` recusa remover mesmo com prefixo `*`). **Fallback:** PowerShell nativo `Get-Acl` → `RemoveAccessRule` (matching por `IdentityReference SID`) → `Set-Acl`. Remove o ACE direto do security descriptor sem depender de resolução de nome.
+- Verificação pós: `icacls` no root do repo E em `auth_info` (herança propagou) mostra apenas os 3 principals canônicos (`Luciano` / `SYSTEM` / `Administradores`). **Zero resíduo Codex, zero SID órfão. Cross-repo write vector fechado.**
+
+### Achado 4 — `auth_info` tightened
+
+- Backup `whatsapp-service/auth_info.acl.pre-corretiva.bak` via `icacls /save /T` — 1534 arquivos, zero falhas. Rede de rollback local (untracked, fora do repo — arquivo grande com ACL de cada file).
+- `pm2 stop cooperebr-whatsapp` (libera locks Baileys nos `.json` de sessão).
+- Atômico: `icacls auth_info /inheritance:r /grant:r "Luciano:(OI)(CI)(F)" "SYSTEM:(OI)(CI)(F)" "Administradores:(OI)(CI)(F)" /T` — 1534/1534 processados.
+- Verificação pós: **zero linha `(I)` herdada**, só as 3 ACEs explícitas. Intacto num `pm2 restart` subsequente (Baileys lê `auth_info` sem `EPERM`).
+
+### Bot WhatsApp ressuscitado — 3 dias mudo (17/07 → 20/07) destravado
+
+Depois do Achado 4 aplicado, `/status` continuava `failed`. **Diagnóstico revelou 2 causas raiz independentes, ambas necessárias pro fix** (nenhuma sozinha resolvia):
+
+1. **Hardcode `version: [2, 3000, 1034195523]` aposentado pelo Meta.** Handshake sempre `code: 405 Method Not Allowed`, fluxo de auto-reconexão esgotava 5 tentativas, caía em `failed`. Fix: `fetchLatestBaileysVersion()` dinâmico com fallback pro hardcode antigo em caso de falha de rede (commit `82c9ebc`). Log confirma: `📌 WhatsApp Web version: 2.3000.1035194821 (isLatest=true)` — **~1M versões à frente** do hardcode; a diferença explica o kick.
+2. **Processo órfão PID 16048** (iniciado `2026-07-17 14:54:46` — data EXATA em que o bot ficou mudo) segurando `0.0.0.0:3002` + `[::]:3002` (IPv6) enquanto o PM2 novo bindava em `127.0.0.1:3002`. Ambas as instâncias liam o mesmo `auth_info` → Meta via 2 conexões com as mesmas credenciais Signal → rejeitava ambas. `pm2 restart` **não mata órfão** (PM2 só controla o processo que ele mesmo spawnou). Cleanup obrigatório: `pm2 delete` + `Stop-Process -Id 16048 -Force` + start limpo pelo `ecosystem.config.cjs` + `pm2 save`.
+
+Runbook (validado 2× consecutivas — com e sem zumbi presente):
+
+```powershell
+pm2 delete cooperebr-whatsapp
+$zpid = (Get-NetTCPConnection -LocalPort 3002 -State Listen -EA SilentlyContinue | Select-Object -First 1).OwningProcess
+if ($zpid) { Stop-Process -Id $zpid -Force }
+pm2 start C:\Users\Luciano\cooperebr\ecosystem.config.cjs --only cooperebr-whatsapp
+pm2 save
+```
+
+Resultado ambas as vezes: `/status = "connected"`, PID único, restart count 0, log `✅ WhatsApp conectado com sucesso!` ~2s pós-boot.
+
+### Débitos catalogados (commit `ad3415c`)
+
+- **P2 `D-novo-WA-ZUMBI-PORTA-3002`** — `pm2 stop/restart` deixa processo órfão em Windows segurando `:3002`. **Raiz do "status failed mascarado"**: sem cleanup do órfão, novo boot sempre falha silenciosamente porque as 2 instâncias competem por `auth_info`. Fix futuro: (a) guard de startup no `whatsapp-service/index.mjs` que aborta com mensagem clara se `:3002` já ocupado por processo não-controlado por PM2; (b) investigar SIGKILL vs SIGTERM handling / child-process desanexado / especificidade Windows; (c) documentar procedimento de cleanup no CLAUDE.md junto à seção PM2 (regenerate Prisma).
+- **P2 `D-novo-WA-LOG-CHAVES-SESSAO`** — `logs/wa-out.log` dumpa material criptográfico Signal Protocol da sessão Baileys (`privKey`, `rootKey`, `remoteIdentityKey`, `baseKey` do `pendingPreKey` com `signedKeyId`) via pino verboso. Local + gitignored + ACL-restrito pós-Achado 8, **mas** leak alternativo (backup automatizado, screen share, agente com acesso ao FS, tarball de suporte, sync na nuvem) vaza a identidade completa da sessão WA — atacante pode impersonar o número. Fix: (a) subir logger pino level de `trace`/`debug` pra `info` no `index.mjs`; (b) localizar callsite que dumpa objeto de estado inteiro (`logger.trace(state)` ou similar) e reduzir pra metadata sem chaves; (c) auditar outros callsites (`state.keys`, `state.creds.noiseKey`, `state.creds.signedIdentityKey`).
+
+### Achado 3 — PENDENTE (único aberto da corretiva mensageria)
+
+Rotação de `WHATSAPP_WEBHOOK_SECRET` + limpeza do `?secret=` embutido no `BACKEND_WEBHOOK_URL` do `.env` do wa-service + consolidação de `COOPERTOKEN_QR_SECRET` (Achado 9 — apagar linhas 73 + 75, manter 76). **Deferido**: passo manual de `.env` mais delicado + Code errou 401 2× hoje. Ordem: Bloco 3 do `docs/seguranca/restart-coordenado-achado-3-4-8.md`, seguido dos smokes obrigatórios do Bloco 5 (WA `/status`, webhook 401/200, igualdade estrutural dos 2 `.env`, round-trip real com `27981341348`, QR round-trip funcional).
+
+### Commits desta rodada (2, ambos pushados em `origin/main`)
+
+| SHA | Mensagem | Escopo |
+|---|---|---|
+| `82c9ebc` | `fix(wa): versao WhatsApp Web dinamica via fetchLatestBaileysVersion - corrige 405 que deixou o bot mudo desde 17/07` | `whatsapp-service/index.mjs` |
+| `ad3415c` | `docs(debitos): catalogo D-novo-WA-ZUMBI-PORTA-3002 e D-novo-WA-LOG-CHAVES-SESSAO (corretiva WA 20/07)` | `docs/debitos-tecnicos.md` |
+
+`git log origin/main..HEAD` conferido vazio antes de cada push (regra sessões paralelas `regra_push_disciplina_sessoes_paralelas_06_11`).
+
+### Lição de método (registrar, não é anedota)
+
+**PM2 `online` ≠ bot conectado.** O status do PM2 reflete vida do processo (bind de porta, uptime, restart count); handshake WA é rejeitado silenciosamente e volta pra reconnect loop, esgota tentativas, cai em `failed` no `/status` do próprio wa-service — **mas PM2 continua `online` porque o processo Node não morre**. Mascarou 3 dias de outage entre 17/07 e 20/07. Nenhum alerta operacional disparou.
+
+**Diagnóstico foi log → código → processos, NÃO re-pareamento às cegas.** A intuição inicial (sessão morta do lado Meta, requer QR novo) teria falhado — o problema era competição local por `auth_info` + hardcode de versão. Só ler `Get-NetTCPConnection`/`netstat` no ângulo certo (múltiplos `OwningProcess` no mesmo porto :3002) revelou o zumbi de 3 dias atrás.
+
+**Runbook `restart-coordenado-achado-3-4-8` + cleanup de zumbi validado 2× consecutivas → candidato a canônico no CLAUDE.md seção PM2** (fazer junto do tratamento futuro do `D-novo-WA-ZUMBI-PORTA-3002`).
