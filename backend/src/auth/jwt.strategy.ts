@@ -22,6 +22,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: getJwtSecret(),
+      // Corretiva IDOR 21/07 Onda 3 item 13 — pinar algoritmo. Sem esta linha
+      // passport-jwt aceita qualquer alg do header do token — vulneravel a
+      // "algorithm confusion" (alg:'none' ou RS256 usando HMAC key como PEM).
+      // HS256 bate com getJwtSecret() (HMAC). Zero break: verificado 21/07,
+      // nao ha outro algoritmo em uso no projeto.
+      // D-novo-JWT-TTL-LONGO catalogado como P3 — TTL 7d fica pra sessao
+      // dedicada de auth refresh (reduzir agora quebra UX sem infra de refresh).
+      algorithms: ['HS256'],
     });
   }
 

@@ -18,10 +18,14 @@
  * lucbragatto+idor@gmail.com.
  */
 import { PrismaClient } from '@prisma/client';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { FaturasService } from '../faturas/faturas.service';
 import { UsinasService } from '../usinas/usinas.service';
 import { UcsService } from '../ucs/ucs.service';
+import { TenantOwnershipGuard } from '../auth/tenant-ownership.guard';
+import { TENANT_RESOURCE_KEY } from '../auth/tenant-resource.decorator';
+import { PerfilUsuario } from '../auth/perfil.enum';
 
 const TENANT_A_ID = 'cmn0ho8bx0000uox8wu96u6fd'; // CoopereBR principal
 const SMOKE_TAG = 'SMOKE-IDOR-ONDA2-2026-07-21';
@@ -164,6 +168,63 @@ describe('IDOR Onda 2 — IDOR estrutural cross-tenant (integration real)', () =
           TENANT_A_ID,
         ),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  // ─── Item 8a — regressão do drift Uc.cooperativaId=NULL ─────────────────
+  //
+  // O motivo real de usar via:'cooperado.cooperativaId' NAO eh estetico — eh
+  // o dado: 19 UCs com Uc.cooperativaId NULL + 2 com drift (coluna aponta
+  // tenant divergente do dono real via cooperado). Se o via estiver mal montado,
+  // 19 UCs somem e so descobrimos por reclamacao. Estes 2 testes provam as
+  // duas metades: o via pega onde a coluna falha E bloqueia cross-tenant.
+
+  describe('Item 8a — @TenantResource via cooperado.cooperativaId (drift NULL)', () => {
+    const reflector = new Reflector();
+    const guard = new TenantOwnershipGuard(reflector, prisma as any);
+    let ucDriftId: string;
+
+    beforeAll(async () => {
+      // UC com coluna cooperativaId NULL, cooperado do TENANT_A (o dono real
+      // via relacao). Simula uma das 19 UCs com drift.
+      ucDriftId = (await prisma.uc.create({
+        data: {
+          numero: `T${Date.now()}D`.slice(0, 15),
+          endereco: 'Rua Drift',
+          cidade: 'Vitoria',
+          estado: 'ES',
+          cooperadoId: cooperadoAId, // dono real → tenant A
+          cooperativaId: null, // COLUNA NULA (drift)
+          distribuidora: 'EDP_ES',
+        },
+      })).id;
+    });
+
+    function ctx(userTenantId: string): ExecutionContext {
+      const handler = () => undefined;
+      Reflect.defineMetadata(
+        TENANT_RESOURCE_KEY,
+        { model: 'uc', via: 'cooperado.cooperativaId' },
+        handler,
+      );
+      return {
+        switchToHttp: () => ({
+          getRequest: () => ({
+            user: { perfil: PerfilUsuario.ADMIN, cooperativaId: userTenantId },
+            params: { id: ucDriftId },
+          }),
+        }) as any,
+        getHandler: () => handler,
+        getClass: () => function MockClass() {},
+      } as any;
+    }
+
+    it('UC com Uc.cooperativaId=NULL + cooperado do A + token A → 200 (via funciona ONDE coluna falha)', async () => {
+      await expect(guard.canActivate(ctx(TENANT_A_ID))).resolves.toBe(true);
+    });
+
+    it('mesma UC + token B → NotFound (via BLOQUEIA cross-tenant)', async () => {
+      await expect(guard.canActivate(ctx(tenantBId))).rejects.toThrow(NotFoundException);
     });
   });
 });

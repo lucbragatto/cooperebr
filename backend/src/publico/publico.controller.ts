@@ -120,7 +120,12 @@ export class PublicoController {
     return convenios;
   }
 
+  // Corretiva IDOR 21/07 Onda 3 item 10 — throttle apertado (5/min por IP).
+  // Dispara WA de saida (custo real + risco de flood pra bot). Sem token de
+  // sessao no fluxo — throttle eh a defesa primaria antes do gate leve tipo
+  // captcha (deferido pra sprint UX).
   @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('iniciar-cadastro')
   async iniciarCadastro(
     @Body() body: { nome: string; telefone: string; codigoRef?: string },
@@ -588,9 +593,12 @@ export class PublicoController {
   @Public()
   @Throttle({ default: { limit: 30, ttl: 3600000 } })
   @AuditLog({ acao: 'cadastro.upload_doc', recurso: 'ConviteConvenioMembro' })
+  // Corretiva IDOR 21/07 Onda 3 item 12 — limits no FileInterceptor (15MB).
+  // Publico sem auth, aceita RG/CNH/comprovante de residencia — teto realista
+  // + defesa contra memory exhaustion / zip-bomb via arquivos gigantes.
   @HttpCode(200)
   @Post('cadastro/upload-doc')
-  @UseInterceptors(FileInterceptor('arquivo'))
+  @UseInterceptors(FileInterceptor('arquivo', { limits: { fileSize: 15 * 1024 * 1024 } }))
   async uploadDocCadastro(
     @Body('token') token: string,
     @Body('tipo') tipo: string,
@@ -1541,10 +1549,14 @@ export class PublicoController {
     }
   }
 
+  // Corretiva IDOR 21/07 Onda 3 item 11 — throttle apertado 5/min. OCR queima
+  // Claude API (custo real por request). Throttle eh mitigacao, nao solucao —
+  // D-novo-OCR-PUBLICO-TOKEN-SESSAO catalogado pra exigir token de sessao.
+  // Item 12 — limits no FileInterceptor (15MB, fatura media 200-500KB).
   @Public()
-  @Throttle({ default: { limit: 30, ttl: 60000 } }) // 30 por minuto para processamento em lote
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('processar-fatura-ocr')
-  @UseInterceptors(FileInterceptor('fatura'))
+  @UseInterceptors(FileInterceptor('fatura', { limits: { fileSize: 15 * 1024 * 1024 } }))
   async processarFaturaOcr(
     @UploadedFile() arquivo: Express.Multer.File,
     @Body() body?: { faturaBase64?: string; faturaTipo?: string; faturaNome?: string }
