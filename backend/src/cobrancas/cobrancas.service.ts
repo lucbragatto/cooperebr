@@ -16,6 +16,25 @@ import { CooperadoClubeService } from '../cooperado-clube/cooperado-clube.servic
 import { CooperTokenTipo, Prisma } from '@prisma/client';import { AsPlatform } from '../common/tenant-context';
 
 
+/**
+ * Tarefa 4 correção #1 (22/07/2026) — retorno discriminado de
+ * `emitirNoGatewaySeConfigurado`. Substitui o `null` anterior que confundia
+ * 3 skips legítimos com 1 falha real. Ver JSDoc do método pra detalhes de
+ * cada branch e do gate #4 no chamador (não notificar quando FALHOU).
+ */
+export type EmissaoGatewayResult =
+  | { tipo: 'SEM_GATEWAY'; motivo: 'sem_cooperativa' | 'sem_config' | 'sem_forma_pagamento' }
+  | {
+      tipo: 'EMITIDO';
+      gatewayId: string;
+      linkPagamento: string | null;
+      boletoUrl: string | null;
+      pixQrCode: string | null;
+      pixCopiaECola: string | null;
+      linhaDigitavel: string | null;
+    }
+  | { tipo: 'FALHOU'; erro: string };
+
 // Calcula valorDesconto e valorLiquido respeitando o modo de remuneração.
 // Especificação `docs/especificacao-clube-cooper-token.md` seção 2:
 //   CAMINHO DESCONTO  → cooperado paga reduzido (valBruto - valDesc), sem token
@@ -262,6 +281,13 @@ export class CobrancasService {
     data.dataVencimento = dataVenc;
     if (dataPag) data.dataPagamento = dataPag;
 
+    // Tarefa 4 correção #2 (22/07/2026) — MARCAR-ANTES-DE-TENTAR no caminho
+    // regular, replicando padrão de convenios-custeio.service.ts:1005.
+    // Se vai tentar emitir (resolvedCoopId + cooperado), a cobrança nasce
+    // AGUARDANDO_EMISSAO — o método `emitirNoGatewaySeConfigurado` transiciona
+    // pra EMITIDO/FALHOU/null (SEM_GATEWAY) depois. Se NÃO vai tentar emitir
+    // (fatura manual sem tenant/cooperado), fica null desde o início.
+    const vaiTentarEmitir = !!(resolvedCoopId && contrato?.cooperadoId);
     const cobranca = await this.prisma.cobranca.create({
       data: {
         ...data,
@@ -273,6 +299,7 @@ export class CobrancasService {
         ...(resolvedCoopId ? { cooperativaId: resolvedCoopId } : {}),
         ...(valorMensalidadeClube > 0 ? { valorMensalidadeClube } : {}),
         ...(planoClubeIdCobrado ? { planoClubeId: planoClubeIdCobrado } : {}),
+        ...(vaiTentarEmitir ? { statusEmissao: 'AGUARDANDO_EMISSAO' as any } : {}),
       },
     });
 
@@ -361,26 +388,33 @@ export class CobrancasService {
       }
     }
 
-    // Emitir automaticamente no gateway de pagamento se configurado
+    // Emitir automaticamente no gateway de pagamento se configurado.
+    // Tarefa 4 correção #1 (22/07/2026) — método retorna EmissaoGatewayResult
+    // (SEM_GATEWAY | EMITIDO | FALHOU) e nunca lança; try/catch anterior era
+    // código morto. Resultado gate as notificações abaixo (correção #4).
+    let emissaoResult: EmissaoGatewayResult = { tipo: 'SEM_GATEWAY', motivo: 'sem_cooperativa' };
     if (resolvedCoopId && contrato?.cooperadoId) {
-      try {
-        await this.emitirNoGatewaySeConfigurado(
-          cobranca.id,
-          resolvedCoopId,
-          contrato.cooperadoId,
-          {
-            valor: data.valorLiquido!,
-            vencimento: data.dataVencimento,
-            descricao: `Cobrança ${data.mesReferencia}/${data.anoReferencia}`,
-          },
-        );
-      } catch (err) {
-        this.logger.warn(`Falha ao emitir no gateway na criação da cobrança: ${(err as Error).message}`);
-      }
+      emissaoResult = await this.emitirNoGatewaySeConfigurado(
+        cobranca.id,
+        resolvedCoopId,
+        contrato.cooperadoId,
+        {
+          valor: data.valorLiquido!,
+          vencimento: data.dataVencimento,
+          descricao: `Cobrança ${data.mesReferencia}/${data.anoReferencia}`,
+        },
+      );
     }
 
+    // Tarefa 4 correção #4 (22/07/2026) — GATE de notificação: só notifica
+    // cooperado se a emissão NÃO falhou. SEM_GATEWAY continua notificando
+    // (os 307 faturados manualmente NÃO podem parar de receber aviso).
+    // EMITIDO também notifica. FALHOU bloqueia — cobrança sem instrumento
+    // de pagamento fica pra retry do cron (correções #2 + #3).
+    const podeNotificarCooperado = emissaoResult.tipo !== 'FALHOU';
+
     // Notificar cooperado via WhatsApp sobre nova cobrança (aviso de vencimento)
-    if (contrato?.cooperado?.telefone) {
+    if (podeNotificarCooperado && contrato?.cooperado?.telefone) {
       try {
         const mesRef = `${String(data.mesReferencia).padStart(2, '0')}/${data.anoReferencia}`;
         const vencimento = data.dataVencimento.toLocaleDateString('pt-BR');
@@ -395,8 +429,9 @@ export class CobrancasService {
       }
     }
 
-    // Sprint 8B: enviar email de fatura ao cooperado
-    if (contrato?.cooperado?.email) {
+    // Sprint 8B: enviar email de fatura ao cooperado.
+    // Tarefa 4 correção #4 (22/07/2026) — mesmo gate do WhatsApp acima.
+    if (podeNotificarCooperado && contrato?.cooperado?.email) {
       try {
         // Buscar dados do gateway pra incluir PIX/boleto no email
         const gwData = await this.prisma.cobrancaGateway.findFirst({
@@ -1145,23 +1180,89 @@ export class CobrancasService {
   }
 
   /**
-   * Após criar uma cobrança, emite automaticamente no Asaas se a cooperativa
-   * tiver config ativa e o cooperado tiver forma de pagamento compatível.
+   * Após criar uma cobrança, emite automaticamente no gateway (Asaas) se a
+   * cooperativa tiver config ativa e o cooperado tiver forma de pagamento
+   * compatível.
+   *
+   * Tarefa 4 correção #1 (22/07/2026) — retorno DISCRIMINADO. Antes retornava
+   * `null` em 4 cenarios diferentes (3 skips legitimos + 1 falha real), o que
+   * apagava o sinal de falha na origem e tornava o try/catch do chamador
+   * (:366-379) codigo morto. Agora:
+   *   - SEM_GATEWAY → skip legitimo (sem cooperativa, sem config, sem forma
+   *     de pagamento). Cooperado deve continuar sendo notificado (307
+   *     faturados manualmente NAO podem parar de receber aviso).
+   *   - EMITIDO → sucesso; retorna dados pra usar em notificacao/email.
+   *   - FALHOU → falha real do gateway (erro capturado no catch). Cooperado
+   *     NAO deve ser notificado (correcao #4) — cobranca fica sem
+   *     instrumento de pagamento ate retry do cron (correcoes #2 + #3).
+   *
+   * NUNCA lanca — o catch interno cobre. try/catch no chamador pode ser
+   * removido com seguranca (fica codigo morto).
    */
   async emitirNoGatewaySeConfigurado(
     cobrancaId: string,
     cooperativaId: string,
     cooperadoId: string,
     dados: { valor: number; vencimento: Date; descricao: string },
-  ) {
-    if (!cooperativaId) return null;
+  ): Promise<EmissaoGatewayResult> {
+    // Correção #2 helper — atualiza statusEmissao + auditoria de tentativas.
+    // Chamado após cada branch pra manter o método self-contained (usável
+    // tanto por criar() na 1ª tentativa quanto por retry do cron).
+    const marcarStatus = async (result: EmissaoGatewayResult): Promise<void> => {
+      try {
+        if (result.tipo === 'EMITIDO') {
+          await this.prisma.cobranca.update({
+            where: { id: cobrancaId },
+            data: {
+              statusEmissao: 'EMITIDO' as any,
+              ultimoErroEmissao: null, // limpa erro anterior se foi retry
+              ultimaTentativaEmissaoEm: new Date(),
+              tentativasEmissao: { increment: 1 },
+            },
+          });
+        } else if (result.tipo === 'FALHOU') {
+          await this.prisma.cobranca.update({
+            where: { id: cobrancaId },
+            data: {
+              // Mantém statusEmissao=AGUARDANDO_EMISSAO. Decisão de FALHA_EMISSAO
+              // fica com o job retry (sabe se atingiu o cap).
+              tentativasEmissao: { increment: 1 },
+              ultimoErroEmissao: result.erro.slice(0, 500),
+              ultimaTentativaEmissaoEm: new Date(),
+            },
+          });
+        } else if (result.tipo === 'SEM_GATEWAY') {
+          // Cobrança manual — não pertence ao ciclo de retry. Se o create
+          // marcou AGUARDANDO_EMISSAO (vaiTentarEmitir=true), reseta pra null
+          // pra não ficar sendo varrida pelo cron eternamente.
+          await this.prisma.cobranca.update({
+            where: { id: cobrancaId },
+            data: { statusEmissao: null },
+          });
+        }
+      } catch (updateErr) {
+        this.logger.error(
+          `Falha ao gravar statusEmissao/tentativasEmissao na cobrança ${cobrancaId}: ${(updateErr as Error).message}`,
+        );
+      }
+    };
+
+    if (!cooperativaId) {
+      const r: EmissaoGatewayResult = { tipo: 'SEM_GATEWAY', motivo: 'sem_cooperativa' };
+      await marcarStatus(r);
+      return r;
+    }
 
     try {
       // Verificar se parceiro tem gateway configurado
       const config = await this.prisma.configGateway.findFirst({
         where: { cooperativaId, ativo: true },
       });
-      if (!config) return null;
+      if (!config) {
+        const r: EmissaoGatewayResult = { tipo: 'SEM_GATEWAY', motivo: 'sem_config' };
+        await marcarStatus(r);
+        return r;
+      }
 
       // Buscar forma de pagamento do cooperado
       const formaPagamento = await this.prisma.formaPagamentoCooperado.findUnique({
@@ -1170,18 +1271,36 @@ export class CobrancasService {
 
       const formasValidas = ['BOLETO', 'PIX', 'CARTAO_CREDITO', 'CREDIT_CARD'];
       const tipo = formaPagamento?.tipo;
-      if (!tipo || !formasValidas.includes(tipo)) return null;
+      if (!tipo || !formasValidas.includes(tipo)) {
+        const r: EmissaoGatewayResult = { tipo: 'SEM_GATEWAY', motivo: 'sem_forma_pagamento' };
+        await marcarStatus(r);
+        return r;
+      }
 
-      return await this.gatewayPagamento.emitirCobranca(cooperadoId, cooperativaId, {
+      const resultado = await this.gatewayPagamento.emitirCobranca(cooperadoId, cooperativaId, {
         valor: dados.valor,
         vencimento: dados.vencimento.toISOString().split('T')[0],
         descricao: dados.descricao,
         formaPagamento: tipo as 'BOLETO' | 'PIX' | 'CREDIT_CARD',
         cobrancaId,
       });
+
+      const r: EmissaoGatewayResult = {
+        tipo: 'EMITIDO',
+        gatewayId: resultado.gatewayId,
+        linkPagamento: resultado.linkPagamento ?? null,
+        boletoUrl: resultado.boletoUrl ?? null,
+        pixQrCode: resultado.pixQrCode ?? null,
+        pixCopiaECola: resultado.pixCopiaECola ?? null,
+        linhaDigitavel: resultado.linhaDigitavel ?? null,
+      };
+      await marcarStatus(r);
+      return r;
     } catch (err) {
       this.logger.warn(`Falha ao emitir no gateway automaticamente: ${(err as Error).message}`);
-      return null;
+      const r: EmissaoGatewayResult = { tipo: 'FALHOU', erro: (err as Error).message };
+      await marcarStatus(r);
+      return r;
     }
   }
 

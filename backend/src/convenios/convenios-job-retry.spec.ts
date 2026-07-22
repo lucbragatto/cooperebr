@@ -71,7 +71,7 @@ describe('ConveniosJob.retryEmissaoConsolidadas — F1.3', () => {
     expect(notificacoesCriar).not.toHaveBeenCalled();
   });
 
-  it('filtra por convenioContabilCobrancaId != null + AGUARDANDO_EMISSAO + tentativas<5 + back-off 30min', async () => {
+  it('filtra por AGUARDANDO_EMISSAO + tentativas<5 + back-off 30min (Tarefa 4 correção #3 22/07: filtro convenioContabilCobrancaId REMOVIDO — path regular tambem eh varrido)', async () => {
     findManyCobranca.mockResolvedValueOnce([]);
 
     await job.retryEmissaoConsolidadas();
@@ -79,7 +79,11 @@ describe('ConveniosJob.retryEmissaoConsolidadas — F1.3', () => {
     expect(findManyCobranca).toHaveBeenCalledTimes(1);
     const call = findManyCobranca.mock.calls[0][0];
 
-    expect(call.where.convenioContabilCobrancaId).toEqual({ not: null });
+    // Filtro convenioContabilCobrancaId != null REMOVIDO (correção #3 22/07).
+    // Filtro por statusEmissao='AGUARDANDO_EMISSAO' já isola apenas cobranças
+    // do ciclo de retry (histórico com statusEmissao=null e cobranças manuais
+    // com SEM_GATEWAY→null ficam fora naturalmente).
+    expect(call.where.convenioContabilCobrancaId).toBeUndefined();
     expect(call.where.statusEmissao).toBe('AGUARDANDO_EMISSAO');
     expect(call.where.tentativasEmissao).toEqual({ lt: 5 });
     expect(call.where.OR).toEqual([
@@ -87,11 +91,52 @@ describe('ConveniosJob.retryEmissaoConsolidadas — F1.3', () => {
       { ultimaTentativaEmissaoEm: { lt: expect.any(Date) } },
     ]);
 
+    // Select ganhou `contrato: { select: { cooperadoId: true } }` como fallback
+    // pra path regular (cooperado alvo via contrato quando conv=null).
+    expect(call.select.contrato).toEqual({ select: { cooperadoId: true } });
+    expect(call.select.convenioContabilCobrancaId).toBe(true);
+
     // janela = now - 30min
     const limite = (call.where.OR[1].ultimaTentativaEmissaoEm as { lt: Date }).lt;
     const diffMin = (Date.now() - limite.getTime()) / 60000;
     expect(diffMin).toBeGreaterThanOrEqual(29);
     expect(diffMin).toBeLessThanOrEqual(31);
+  });
+
+  it('Tarefa 4 correção #3 (22/07) — path regular: cobrança SEM conv (convenioContabilCobrancaId=null) + contrato.cooperadoId → emitirNoGateway é chamado com cooperado alvo do contrato', async () => {
+    findManyCobranca.mockResolvedValueOnce([
+      {
+        id: 'cob-regular-1',
+        valorLiquido: 250.75,
+        dataVencimento: new Date('2026-08-15'),
+        cooperativaId: 'coop-A',
+        mesReferencia: 7,
+        anoReferencia: 2026,
+        convenioContabilCobrancaId: null, // <- path regular
+        contrato: { cooperadoId: 'cooperado-A-1' }, // <- fallback
+        convenioContabilCobranca: null,
+      },
+    ]);
+    findUniqueCobranca.mockResolvedValueOnce({
+      statusEmissao: 'EMITIDO',
+      tentativasEmissao: 1,
+      ultimoErroEmissao: null,
+    });
+
+    await job.retryEmissaoConsolidadas();
+
+    // Chama com cooperado do CONTRATO (não do convênio) — o método
+    // custeioService.emitirNoGateway aceita qualquer cooperadoId.
+    expect(emitirNoGateway).toHaveBeenCalledTimes(1);
+    expect(emitirNoGateway).toHaveBeenCalledWith(
+      'cob-regular-1',
+      'coop-A',
+      'cooperado-A-1', // <- fallback do contrato, não do convenio
+      250.75,
+      new Date('2026-08-15'),
+      'Cobrança 07/2026', // <- descricao sem prefixo "consolidada — empresaNome"
+    );
+    expect(notificacoesCriar).not.toHaveBeenCalled(); // EMITIDO → sem notif de falha
   });
 
   it('SUCESSO: emitirNoGateway transitou pra EMITIDO → conta como emitida, sem FALHA', async () => {

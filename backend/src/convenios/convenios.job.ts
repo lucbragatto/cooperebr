@@ -103,9 +103,14 @@ export class ConveniosJob {
 
     const limite = new Date(Date.now() - RETRY_BACKOFF_MIN * 60 * 1000);
 
+    // Tarefa 4 correção #3 (22/07/2026) — filtro RELAXADO: removido
+    // `convenioContabilCobrancaId: { not: null }`. Agora varre TAMBÉM cobranças
+    // regulares que a correção #2 marca como AGUARDANDO_EMISSAO na criação.
+    // Histórico com statusEmissao=null fica de fora naturalmente (o filtro
+    // statusEmissao: 'AGUARDANDO_EMISSAO' já protege — cobranças antigas E as
+    // manuais/sem_gateway ficam invisíveis pro cron).
     const pendentes = await this.prisma.cobranca.findMany({
       where: {
-        convenioContabilCobrancaId: { not: null },
         statusEmissao: 'AGUARDANDO_EMISSAO',
         tentativasEmissao: { lt: RETRY_MAX_TENTATIVAS },
         OR: [
@@ -120,6 +125,12 @@ export class ConveniosJob {
         cooperativaId: true,
         mesReferencia: true,
         anoReferencia: true,
+        convenioContabilCobrancaId: true,
+        // Fallback pro caminho regular (sem convênio) — precisa do cooperadoId
+        // via contrato pra saber pra quem emitir.
+        contrato: {
+          select: { cooperadoId: true },
+        },
         convenioContabilCobranca: {
           select: {
             id: true,
@@ -148,23 +159,29 @@ export class ConveniosJob {
     for (const c of pendentes) {
       const conv = c.convenioContabilCobranca;
       const cooperativaId = c.cooperativaId ?? conv?.cooperativaId;
-      const pagadorCooperadoId = conv?.pagadorCooperadoId;
+      // Correção #3 (22/07/2026) — cooperado alvo tem 2 origens:
+      //   - Convênio (consolidada custeio): conv.pagadorCooperadoId (empresa PJ)
+      //   - Regular (path criado por cobrancas.service.criar): contrato.cooperadoId
+      const cooperadoAlvo = conv?.pagadorCooperadoId ?? c.contrato?.cooperadoId;
 
-      if (!conv || !cooperativaId || !pagadorCooperadoId) {
+      if (!cooperativaId || !cooperadoAlvo) {
         this.logger.warn(
-          `[F1 retry] Cobrança ${c.id} sem convênio/cooperativa/pagador resolvíveis — skip.`,
+          `[F1 retry] Cobrança ${c.id} sem cooperativa/cooperado resolvíveis — skip.`,
         );
         continue;
       }
 
-      const descricao = `Cobrança consolidada — ${conv.empresaNome} — ${String(c.mesReferencia).padStart(2, '0')}/${c.anoReferencia}`;
+      const mesRefStr = `${String(c.mesReferencia).padStart(2, '0')}/${c.anoReferencia}`;
+      const descricao = conv
+        ? `Cobrança consolidada — ${conv.empresaNome} — ${mesRefStr}`
+        : `Cobrança ${mesRefStr}`;
 
       tentadas++;
       try {
         await this.custeioService.emitirNoGateway(
           c.id,
           cooperativaId,
-          pagadorCooperadoId,
+          cooperadoAlvo,
           Number(c.valorLiquido),
           c.dataVencimento,
           descricao,
@@ -199,9 +216,13 @@ export class ConveniosJob {
         atual.tentativasEmissao >= RETRY_MAX_TENTATIVAS
       ) {
         falhas++;
+        // Correção #3 (22/07/2026) — fallback pro path regular (conv=null).
+        // Texto da notificação in-app usa mesRef como descriminador quando
+        // não há empresaNome (convênio).
+        const nomeReferencia = conv?.empresaNome ?? `Cobrança regular ${mesRefStr}`;
         await this.marcarFalhaEmissao(
           c.id,
-          conv.empresaNome,
+          nomeReferencia,
           cooperativaId,
           atual.ultimoErroEmissao ?? 'erro desconhecido',
         );
