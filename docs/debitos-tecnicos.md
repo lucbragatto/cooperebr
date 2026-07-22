@@ -4,6 +4,32 @@
 > origem, impacto e prioridade. Atualizar quando débito é resolvido OU quando
 > aparece novo durante uma sessão.
 
+**Última atualização:** 2026-07-22 (manhã pré-Tarefa 4) — **Bloco 6 ROTA B FECHADO em definitivo + WA re-pareamento em curso + escada de diagnóstico ampliada (5º cenário)**. **1 NOVO catalogado + 2 atualizações:**
+
+- **P2 `D-novo-WA-REPAREAMENTO-PERDE-ACL`** — todo re-pareamento WhatsApp (Baileys recria `auth_info/` do zero após scan do QR) restaura a permissão herdada padrão do Windows na pasta nova. Isso desfaz em SILÊNCIO a corretiva de segurança do Achado 4 (`docs/seguranca/restart-coordenado-achado-3-4-8.md` Bloco Achado 4) aplicada 21/07. **Fix pro runbook:** adicionar passo obrigatório PÓS-pareamento — (1) rodar backup ACL da `auth_info` nova: `icacls C:\Users\Luciano\cooperebr\whatsapp-service\auth_info /save auth_info.acl.pos-repareamento-<data>.bak /T`; (2) re-aplicar `icacls /inheritance:r /grant:r "Luciano:(OI)(CI)(F)" "SYSTEM:(OI)(CI)(F)" "Administradores:(OI)(CI)(F)" /T`; (3) verificar com `icacls .../auth_info` que ficam apenas as 3 ACEs canônicas (zero `(I)` herdada). **Origem:** sessão 2026-07-22 manhã — Luciano apontou o gap antes do QR ser escaneado, evitando que a corretiva de 21/07 fosse silenciosamente desfeita. **Não bloqueia próxima sessão de código** (Tarefa 4), mas é operacional obrigatório de fechamento do próprio re-pareamento.
+
+### `D-novo-WA-DIAGNOSTICO-REPAREAR-PRECIPITADO` (P3) — 5º cenário adicionado 22/07
+
+Escada de diagnóstico WA agora distingue 5 cenários (não mais 4):
+
+1. Versão WA hardcoded vencida (`code: 405`) → fix: `fetchLatestBaileysVersion()` (20/07 commit `82c9ebc`).
+2. Processo zumbi na `:3002` competindo por `auth_info` → cleanup `pm2 delete` + `Stop-Process` (20/07 `D-novo-WA-ZUMBI-PORTA-3002`).
+3. `awaiting_qr` do cascade PM2 daemon quando `auth_info/` está INTACTO → sinal de retry esgotado, não sessão perdida (21/07 tarde).
+4. Timeout persistente `code: 408` com **`creds.json` intacto + versão `isLatest=true` + rede OK** → **desassociação silenciosa do lado Meta** — é o ÚNICO cenário em que re-parear é a resposta certa (**catalogado 22/07 manhã: rede confirmada OK — `g.whatsapp.net:443` OK, `web.whatsapp.com:443` OK, IP `.11`/gw `.1` sãos**). Impressão digital distinta das 4 recusas anteriores.
+5. Desconexão real com `loggedOut/401` explícito no log + `auth_info` já apagado pelo `fs.rmSync(AUTH_DIR)` do próprio `index.mjs` → re-pareamento obrigatório (nunca observado em produção — path defensivo do código).
+
+### Bloco 6 ROTA B — FECHADO EM DEFINITIVO 22/07 09:00-14:00
+
+Verificação final no **log real** `C:\Users\Luciano\cooperebr\logs\nest-out.log` (NÃO `~/.pm2/logs` que está parado desde abril):
+- Ocorrências hoje de query fallback deprecated: **0**
+- Ocorrências hoje de `Unauthorized` no webhook-incoming: **0**
+- Total warns deprecated pós-rotação 21/07 07:46: **0**
+- Janela 24h fechou às 22/07 07:46 sem qualquer sinal residual.
+
+Ação executada nesta sessão (mesmo commit): removido `?secret=` fallback + warn do `whatsapp-fatura.controller.ts:100-111`. Handler agora aceita APENAS header `x-whatsapp-secret`. Spec `whatsapp-fatura.controller.achado3.spec.ts` refatorado — 4 cenários canônicos originais retidos + 1 regressão nova (`header VAZIO → 401` — antes caía no fallback, agora rejeita). **5/5 PASS.** Compat window do Achado 3 fechada em definitivo.
+
+---
+
 **Última atualização:** 2026-07-22 (fechamento pós-standby) — **Correções na frase de retomada** (falso-diagnóstico persistente do WA + comando smoke com curl+localhost dando IPv6 falso-negativo). **1 NOVO catalogado:**
 
 - **P3 `D-novo-WA-DIAGNOSTICO-REPAREAR-PRECIPITADO`** — "re-parear a sessão WhatsApp pelo celular" foi recomendado **4× nesta semana** (16/07, 20/07 tarde, 20/07 noite, 21/07 fechamento) e estava **errado nas 4**. Causa real nas 4: (a) versão WA Web hardcoded vencida (fix `82c9ebc` 20/07 — `fetchLatestBaileysVersion`); (b) processo zumbi na `:3002` competindo pelo `auth_info` (fix cleanup via `pm2 delete` + `Stop-Process` — `D-novo-WA-ZUMBI-PORTA-3002`); (c) `awaiting_qr` do cascade PM2 daemon 21/07 tarde — `auth_info/` intacto com 1.578 arquivos + `creds.json` gravado, apenas `failed` de retry esgotado. **Evidência estrutural** que impede o falso-diagnóstico: o próprio `whatsapp-service/index.mjs` executa `fs.rmSync(AUTH_DIR)` em desconexão real (`loggedOut`/`401`). **Enquanto `auth_info/` existir com `creds.json` populado, re-parear é desnecessário** — é sempre outra coisa. **Fix:** (a) documentar escada de diagnóstico canônica no runbook (`docs/seguranca/restart-coordenado-achado-3-4-8.md`) — checar zumbi → restart + status → grep log por `405`/`Connection Failure`/`loggedOut` → SÓ RE-PAREAR se `auth_info/` foi apagado pelo próprio código; (b) commentário `WARNING` no `index.mjs` no callsite do `fs.rmSync` alertando "esta é a ÚNICA condição que exige re-pareamento"; (c) propagar padrão pra frases de retomada e docs futuras. Aplicado no PASSO 0 item 4 da frase atual (22/07). **Origem:** sessão 22/07 fechamento pós-standby — Luciano apontou o falso-diagnóstico repetido.

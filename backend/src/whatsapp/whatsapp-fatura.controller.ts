@@ -66,19 +66,18 @@ export class WhatsappFaturaController {
   // (cooperebr é dono do Baileys — não há atacante externo
   // legítimo neste endpoint).
   //
-  // Corretiva 2026-07-16 Achado 3 — auth via HEADER `x-whatsapp-secret`
-  // (preferencial). Query `?secret=` mantida como fallback na janela de
-  // compat — emite warn quando usada. Precedência: header > query.
-  // "Header presente" = não-vazio: string vazia cai pro fallback pra não
-  // travar emissor legado que ainda manda por query. Auth validada via
-  // helper único `secretConfere` (length-check + timingSafeEqual).
+  // Corretiva 2026-07-16 Achado 3 — auth via HEADER `x-whatsapp-secret`.
+  // Fallback query `?secret=` REMOVIDO em 2026-07-22 (Bloco 6 do runbook
+  // restart-coordenado-achado-3-4-8 fechou a compat window: janela 24h
+  // após rotação 21/07 07:46 apresentou 0 usos + 0 Unauthorized no log
+  // real `logs/nest-out.log`; sinal limpo). Auth validada via helper
+  // único `secretConfere` (length-check + timingSafeEqual).
   @Public()
   @SkipThrottle({ default: true })
   @Throttle({ webhook: { limit: 600, ttl: 60_000 } })
   @Post('webhook-incoming')
   async webhookIncoming(
     @Headers('x-whatsapp-secret') secretHeader: string | undefined,
-    @Query('secret') secretQuery: string | undefined,
     @Body() body: {
       telefone: string;
       tipo: 'texto' | 'imagem' | 'documento' | 'audio' | 'video' | 'sticker' | 'location';
@@ -93,24 +92,7 @@ export class WhatsappFaturaController {
     if (!expectedSecret) {
       throw new UnauthorizedException('Webhook secret não configurado');
     }
-    let autorizado = false;
-    if (secretHeader && secretHeader.length > 0) {
-      autorizado = secretConfere(secretHeader, expectedSecret);
-    }
-    if (!autorizado && secretQuery && secretQuery.length > 0) {
-      autorizado = secretConfere(secretQuery, expectedSecret);
-      if (autorizado) {
-        // Warn SÓ quando o fallback query foi EFETIVAMENTE usado (não
-        // quando o header também estava presente e válido). Um warn por
-        // request, sem duplicação — cenário C3 da spec.
-        this.logger.warn(
-          '[WA-WEBHOOK] Secret via query string (deprecated). ' +
-          'Migre o emissor pra header `x-whatsapp-secret`. ' +
-          'A compat será removida em versão futura.',
-        );
-      }
-    }
-    if (!autorizado) {
+    if (!secretHeader || secretHeader.length === 0 || !secretConfere(secretHeader, expectedSecret)) {
       throw new UnauthorizedException('Webhook secret inválido');
     }
     this.logger.log(`Mensagem recebida de ${body.telefone} (${body.tipo})`);
