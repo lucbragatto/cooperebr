@@ -4181,11 +4181,17 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    `backend/scripts/__*`/`test-*.mjs`, `ponte-wa-telegram-leve/`,
    sobra `backend/node_modules/.prisma/client/query_engine-windows.dll.node.old`
    do troubleshooting Prisma, `whatsapp-service/auth_info.acl.pre-corretiva.bak`
-   (backup Achado 4), `docs/diagramas/cadastro-usinas.html` M
-   (line-ending flip, última mudança semântica 17/05 commit `7382063`,
-   NÃO commitar). NUNCA `git add .` / `-A`. Último commit em main deve
-   ser `docs(sessao): fechamento 21/07 — corretiva IDOR 13 furos + ROTA B
-   Achado 3`. `git log origin/main..HEAD --oneline` deve estar VAZIO.
+   (backup Achado 4), `whatsapp-service/auth_info.pre-repareamento-2207/`
+   (backup pre re-pareamento 22/07 — rollback local, remover apos validacao
+   do bot novo), `docs/diagramas/cadastro-usinas.html` M (line-ending flip,
+   última mudança semântica 17/05 commit `7382063`, NÃO commitar). NUNCA
+   `git add .` / `-A`. **AgentsModule (IAG) preservado em branch
+   `wip/agents-subsistema-1106`** (commit `46255c2` — 19 arquivos, 2.573
+   linhas, sprint pausado 11/06 sem merge no main;
+   `D-novo-AGENTS-SUBSISTEMA-ORFAO`). Se retomar sprint agents:
+   `git checkout wip/agents-subsistema-1106`. Último commit em main deve
+   ser `docs(seg): cataloga D-novo-AGENTS-SUBSISTEMA-ORFAO + wip preservado
+   em branch`. `git log origin/main..HEAD --oneline` deve estar VAZIO.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    + cooperebr-whatsapp online. Schemas aplicados no banco dev/prod-lite:
