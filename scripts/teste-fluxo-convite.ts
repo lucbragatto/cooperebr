@@ -208,12 +208,26 @@ async function main() {
 
   const webhookSecret = process.env.WHATSAPP_WEBHOOK_SECRET || 'cooperebr-webhook-secret';
 
-  // Simular mensagem do número novo
-  const msgWebhook = await http('POST', `/whatsapp/webhook-incoming?secret=${webhookSecret}`, {
-    telefone: '5527992000001',
-    tipo: 'texto',
-    corpo: 'menu',
-  });
+  // Simular mensagem do número novo — auth via header x-whatsapp-secret (fallback
+  // ?secret= foi removido em 2026-07-22 do receptor, Bloco 6 fechou compat window).
+  // Helper http() não aceita headers custom, então chamada direta.
+  const msgWebhook = await (async () => {
+    const res = await fetch(`${API}/whatsapp/webhook-incoming`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-whatsapp-secret': webhookSecret,
+      },
+      body: JSON.stringify({
+        telefone: '5527992000001',
+        tipo: 'texto',
+        corpo: 'menu',
+      }),
+    });
+    let data: any;
+    try { data = await res.json(); } catch { data = {}; }
+    return { status: res.status, data, ok: res.ok };
+  })();
 
   if (msgWebhook.ok || msgWebhook.status === 201) {
     registrar('WhatsApp webhook (mensagem menu)', true, 'Bot processou mensagem do número do convidado');

@@ -36,7 +36,9 @@ Ação executada nesta sessão (mesmo commit): removido `?secret=` fallback + wa
 
 **Correções bônus da frase de retomada (não são débitos, são fatos travados)**:
 - PASSO 0 item 4 — `curl http://localhost:3002/status` trocado por `Invoke-RestMethod http://127.0.0.1:3002/status` (curl resolve `localhost` → `::1` IPv6 e dá exit 7 falso-negativo; wa-service escuta `127.0.0.1` IPv4 puro).
-- PASSO 0 item 5 — Bloco 6 monitor ROTA B checado 22/07 09:00 no log real: 0 fallback `?secret=`, 0 `Unauthorized`, 2 inbounds legítimos via header (07:51 e 08:05). Sinal limpo, janela 24h é formalidade. Registrado pra próxima sessão não re-investigar.
+- PASSO 0 item 5 — Bloco 6 monitor ROTA B checado 2 vezes:
+  - **Checagem PARCIAL 21/07 ~09:00** (~1h pós-rotação 07:46): 2 inbounds legítimos via header (07:51 e 08:05), 0 fallback, 0 Unauthorized. Sinal limpo cedo.
+  - **Checagem FINAL 22/07 14:00** (log real `logs/nest-out.log`, 2.162.585 linhas, até 14:00): total warns deprecated pós-rotação = **0**, ocorrências hoje de query fallback = **0**, ocorrências hoje de Unauthorized no webhook-incoming = **0**. **É essa checagem final que justifica a remoção do fallback** no commit da sessão 22/07.
 
 ---
 
