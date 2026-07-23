@@ -81,7 +81,54 @@
 
 ## ONDE PARAMOS — 2026-07-21 (DIA DUPLO — MANHÃ: ROTA B Achado 3 fechado / TARDE: Corretiva IDOR 13 furos + SUSPECT em 3 ondas + 3.5)
 
-🟡 **Adenda 22/07 09:00** — 3 correções na FRASE DE RETOMADA aplicadas em `9ffd8ab` + adenda doc `docs/sessoes/2026-07-22-adenda-correcoes-frase-retomada.md`: (a) `curl localhost` → `Invoke-RestMethod 127.0.0.1` (IPv4 explícito, evita `::1` falso-negativo); (b) "re-parear pelo celular" substituído por escada de diagnóstico (`Get-NetTCPConnection` → restart → `pm2 logs` → só re-parear se `auth_info` foi apagado pelo `fs.rmSync` do próprio código); (c) Bloco 6 ROTA B checado 22/07 09:00 (0 fallback, 0 Unauthorized, 2 inbounds via header — janela 24h é formalidade). Débito novo `D-novo-WA-DIAGNOSTICO-REPAREAR-PRECIPITADO` (P3) catalogado.
+## ONDE PARAMOS — 2026-07-22 (dia inteiro) — Bloco 6 fechado + AgentsModule preservado + Tarefa 4 em WIP + WA mudo aguardando scan
+
+**7 commits pushados** no dia distribuídos em 3 branches: `main` (5), `wip/agents-subsistema-1106` (1), `wip/tarefa4-emissao-idempotencia` (1). Fechamento deste turno adiciona 1 commit de doc no main.
+
+### Manhã (09:00) — correções na frase de retomada (`9ffd8ab` + `f55b57f`)
+3 correções aplicadas: `curl localhost` → `Invoke-RestMethod 127.0.0.1` IPv4 explícito; "re-parear pelo celular" substituído por escada de diagnóstico; Bloco 6 checado (parcial 21/07 09:00 e final 22/07 09:00 no log real). Débito P3 `D-novo-WA-DIAGNOSTICO-REPAREAR-PRECIPITADO` catalogado.
+
+### Tarde (14:00-20:00) — 5 frentes independentes
+
+**1. Bloco 6 ROTA B fechado em definitivo (`2d08aeb`)** — verificação final `logs/nest-out.log` 22/07 14:00: 0 warns pós-rotação, 0 fallback, 0 Unauthorized. Removidos `whatsapp-fatura.controller.ts:100-112` (bloco fallback query) + parâmetro `@Query('secret')`. Spec `whatsapp-fatura.controller.achado3.spec.ts` refatorado 5/5 PASS (Cregression novo: header vazio → 401). **Compat window do Achado 3 fechada em definitivo.**
+
+**2. Fix teste-fluxo-convite (`06c5add`)** — `scripts/teste-fluxo-convite.ts:212` ainda usava `?secret=` na URL, quebrava silenciosamente com a remoção do fallback. Migrado pra header `x-whatsapp-secret`. Débitos-tecnicos atualizado — separadas as checagens PARCIAL 21/07 09:00 (2 inbounds legítimos) e FINAL 22/07 14:00 (0 tudo).
+
+**3. AgentsModule preservado em branch WIP (`46255c2` + `ad2ad10`)** — 19 arquivos untracked em `backend/src/agents/` desde 11/06 (sprint pausado, 2.573 linhas, não importado em `app.module.ts` — código morto em runtime). Dentro de `src/` o `tsc` compila em todo build; a um `git clean` de sumir. Opção A escolhida: `git checkout -b wip/agents-subsistema-1106` + push, `main` limpo. Débito P3 `D-novo-AGENTS-SUBSISTEMA-ORFAO` catalogado. Retomada futura: `git checkout wip/agents-subsistema-1106`.
+
+**4. Tarefa 4 correções #1+#4+#2+#3 em branch WIP (`4c929cf`)** — decisão Luciano: NÃO pushar no main pra não deixar estado intermediário pior que o bug original. Estado no branch `wip/tarefa4-emissao-idempotencia`:
+- **#1** — tipo `EmissaoGatewayResult` (`SEM_GATEWAY`×3motivos | `EMITIDO` | `FALHOU`), método `emitirNoGatewaySeConfigurado` nunca lança + faz update interno de statusEmissao via helper `marcarStatus`; try/catch morto do chamador removido.
+- **#4** — `podeNotificarCooperado = emissaoResult.tipo !== 'FALHOU'`; gates no WA e email; default `SEM_GATEWAY` preserva os 307 faturados manualmente.
+- **#2** — `criar()` marca `statusEmissao: 'AGUARDANDO_EMISSAO'` só se `vaiTentarEmitir` (fatura manual continua null); método faz o update interno pós-tentativa.
+- **#3** — filtro do cron relaxado (removido `convenioContabilCobrancaId: { not: null }`); select ganha `contrato: { select: { cooperadoId: true } }` como fallback; `cooperadoAlvo = conv?.pagadorCooperadoId ?? c.contrato?.cooperadoId`; descrição/nomeReferencia com fallback.
+- **21/21 testes PASS** (12 novos gate + 8 job retry com 1 novo pra path regular + assertions).
+- **REVISADO**: só #1+#4 (Luciano conferiu linha a linha). **PENDENTE review**: #2+#3.
+- **Pergunta aberta**: caminho convênio notifica cooperado antes de confirmar emissão? Grep desta sessão em `convenios/`: **zero callers** de `notificarCobrancaGerada`/`enviarFatura` — indicativo forte de que NÃO notifica. Confirmação formal pra próxima sessão.
+- **#5+#6 NÃO iniciadas** — schema change (`@@unique(cobrancaId)` + reconciliação órfã), travadas até WA estabilizar (trava de sequenciamento).
+
+**5. WA re-pareamento iniciado (bot MUDO até scan manual)** — 5º cenário `D-novo-WA-DIAGNOSTICO-REPAREAR-PRECIPITADO`: `408 crônico` + `creds.json` intacto + versão `isLatest=true` + rede OK (`g.whatsapp.net:443` OK) = desassociação silenciosa do lado Meta. É o único quadro em que re-parear é a resposta certa. **Impressão digital distinta das 4 recusas anteriores.**
+- `pm2 stop cooperebr-whatsapp` → `Rename-Item auth_info auth_info.pre-repareamento-2207` (rollback preservado — 1.578 arquivos) → `pm2 start` → QR novo no log
+- **Luciano NÃO escaneou hoje** — bot mudo até re-pareamento manual
+- **Ação obrigatória pós-scan**: `D-novo-WA-REPAREAMENTO-PERDE-ACL` P2 catalogado — Baileys recria `auth_info/` com permissão herdada padrão do Windows, desfaz em SILÊNCIO a corretiva Achado 4 de 21/07. Runbook: backup ACL + `icacls /inheritance:r /grant:r "Luciano:(OI)(CI)(F)" "SYSTEM:..." "Administradores:..." /T` + verificar 3 principals + zero herança `(I)`.
+- **Enquanto não parear + ACL re-aplicada, Achado 4 fica meio-aberto.**
+
+### Próximo passo (único e claro)
+
+Revisar #2+#3 + responder pergunta convênio → merge `wip/tarefa4-emissao-idempotencia` → main + push → então #5+#6 (schema change, exige WA estabilizado).
+
+### Débitos abertos
+
+Da lista original de deferidos, único que **não fechou** hoje: **P3 `D-novo-BJ /uploads/` estático sem auth**. Segue pra sessão futura de segurança.
+
+Débitos novos catalogados hoje: `D-novo-WA-DIAGNOSTICO-REPAREAR-PRECIPITADO` (P3), `D-novo-WA-REPAREAMENTO-PERDE-ACL` (P2), `D-novo-AGENTS-SUBSISTEMA-ORFAO` (P3).
+
+Detalhe: `docs/sessoes/2026-07-22-wa-repareamento-tarefa4-wip.md`.
+
+---
+
+## ONDE PARAMOS — 2026-07-22 (adenda MANHÃ 09:00) — correções na frase de retomada
+
+🟡 3 correções na FRASE DE RETOMADA aplicadas em `9ffd8ab` + adenda doc `docs/sessoes/2026-07-22-adenda-correcoes-frase-retomada.md`: (a) `curl localhost` → `Invoke-RestMethod 127.0.0.1` (IPv4 explícito, evita `::1` falso-negativo); (b) "re-parear pelo celular" substituído por escada de diagnóstico (`Get-NetTCPConnection` → restart → `pm2 logs` → só re-parear se `auth_info` foi apagado pelo `fs.rmSync` do próprio código); (c) Bloco 6 ROTA B checado 22/07 09:00 (0 fallback, 0 Unauthorized, 2 inbounds via header — janela 24h é formalidade). Débito novo `D-novo-WA-DIAGNOSTICO-REPAREAR-PRECIPITADO` (P3) catalogado.
 
 🟢 **21/07 — DIA DUPLO.**
 - **Manhã** (registrada abaixo): ROTA B fechada — Achado 3 rotacionado, **Corretiva Mensageria WA 9/9 provada end-to-end** (round-trip inbound real, bot respondeu com menu completo).
@@ -4185,13 +4232,20 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    (backup pre re-pareamento 22/07 — rollback local, remover apos validacao
    do bot novo), `docs/diagramas/cadastro-usinas.html` M (line-ending flip,
    última mudança semântica 17/05 commit `7382063`, NÃO commitar). NUNCA
-   `git add .` / `-A`. **AgentsModule (IAG) preservado em branch
-   `wip/agents-subsistema-1106`** (commit `46255c2` — 19 arquivos, 2.573
-   linhas, sprint pausado 11/06 sem merge no main;
-   `D-novo-AGENTS-SUBSISTEMA-ORFAO`). Se retomar sprint agents:
-   `git checkout wip/agents-subsistema-1106`. Último commit em main deve
-   ser `docs(seg): cataloga D-novo-AGENTS-SUBSISTEMA-ORFAO + wip preservado
-   em branch`. `git log origin/main..HEAD --oneline` deve estar VAZIO.
+   `git add .` / `-A`. **Branches WIP no origin** (aguardando retomada):
+   - `wip/agents-subsistema-1106` (commit `46255c2`) — Modulo IAG (sprint
+     pausado 11/06, sem merge no main). Retomar: `git checkout
+     wip/agents-subsistema-1106`.
+   - `wip/tarefa4-emissao-idempotencia` (commit `4c929cf`) — **A PRÓXIMA
+     FRENTE**: correções #1-#4 da Tarefa 4 Asaas emissão. Retomar:
+     `git checkout wip/tarefa4-emissao-idempotencia` + `git diff main..HEAD`
+     pra ver as 441+/35- linhas (4 arquivos).
+   - `feature/mascara-email-convenio` (commit `7745082`) — Sprint máscara
+     e-mail pausada 14/07 (piloto Santi ATIVO no banco).
+
+   Último commit em main deve ser `docs(sessao): fechamento 22/07 tarde — WA
+   re-pareamento iniciado + agents wip + Tarefa 4 wip`. `git log
+   origin/main..HEAD --oneline` deve estar VAZIO.
 
 3. Rodar `pm2 list`. Esperado: cooperebr-backend + cooperebr-frontend
    + cooperebr-whatsapp online. Schemas aplicados no banco dev/prod-lite:
@@ -4240,21 +4294,85 @@ PASSO 0 — Verificações operacionais OBRIGATÓRIAS antes de qualquer leitura:
    Comando pra re-conferir se quiser:
    `pm2 logs cooperebr-backend --lines 500 --nostream | Select-String "WA-WEBHOOK.*deprecated"`.
 
-PASSO 1 — Frase COMANDANTE (Corretiva IDOR + ROTA B FECHADAS 21/07; próxima frente = Tarefa 4):
+PASSO 1 — Frase COMANDANTE (TAREFA 4 EM ANDAMENTO em branch WIP — próximo passo: revisar #2+#3 + responder pergunta convênio, depois merge):
 
-🟢 **21/07/2026 — DIA DUPLO.**
-- **Manhã:** ROTA B fechada — Achado 3 rotacionado, Corretiva Mensageria WA
-  9/9 provada end-to-end (round-trip inbound REAL, bot respondeu com menu
-  completo pro Luciano). Detalhe: `docs/sessoes/2026-07-21-rota-b-achado-3-rotacao-secret.md`.
-- **Tarde:** Corretiva IDOR/multi-tenant completa — 13 furos + SUSPECT contratos
-  em 3 ondas + 3.5 pós-revisão, **110/110 testes**, prova por mutação rodada em
-  3 pontos (Onda 1 pixChave, Onda 2 faturas gate, Onda 3 HS256 SEM pin),
-  **6 commits pushados** (`cfe4813..f15439f`). Detalhe:
+🟢 **21/07/2026 — DIA DUPLO fechado.**
+- Manhã: ROTA B fechada — Corretiva Mensageria WA 9/9 provada end-to-end.
+  Detalhe: `docs/sessoes/2026-07-21-rota-b-achado-3-rotacao-secret.md`.
+- Tarde: Corretiva IDOR/multi-tenant — 13 furos + SUSPECT em 3 ondas + 3.5,
+  110/110 testes, 6 commits (`cfe4813..f15439f`). Detalhe:
   `docs/sessoes/2026-07-21-corretiva-idor-multitenant.md`.
 
-**Próxima frente: TAREFA 4 — Asaas EMISSÃO (idempotência + retry unificado).**
+🟡 **22/07/2026 — dia longo, TAREFA 4 iniciada, bot MUDO.**
+Bloco 6 fechado (`2d08aeb`), teste-fluxo-convite migrado (`06c5add`),
+AgentsModule preservado em WIP (`46255c2` + `ad2ad10`), Tarefa 4 #1-#4 em WIP
+(`4c929cf`), WA re-pareamento iniciado (não escaneado). Detalhe:
+`docs/sessoes/2026-07-22-wa-repareamento-tarefa4-wip.md`.
 
-═══ FASE 1 READ-ONLY JÁ FOI FEITA em 21/07 — NÃO REFAZER O LEVANTAMENTO ═══
+═══ TAREFA 4 — Asaas EMISSÃO — status atual ═══
+
+**Branch: `wip/tarefa4-emissao-idempotencia` commit `4c929cf`.**
+
+Para retomar: `git checkout wip/tarefa4-emissao-idempotencia` +
+`git diff main..HEAD` mostra 4 arquivos (441+/35- linhas).
+
+**FEITO nesta iteração (correções #1+#4+#2+#3, sem schema change):**
+- #1 — tipo `EmissaoGatewayResult` (SEM_GATEWAY×3motivos | EMITIDO | FALHOU),
+  método `emitirNoGatewaySeConfigurado` nunca lança + update interno de
+  `statusEmissao`/`tentativasEmissao` via helper `marcarStatus`. try/catch
+  morto do chamador removido.
+- #4 — `podeNotificarCooperado = emissaoResult.tipo !== 'FALHOU'`; gates no WA
+  (linha 409) e email (425); default `SEM_GATEWAY` preserva 307 manuais.
+- #2 — `criar()` marca `statusEmissao: 'AGUARDANDO_EMISSAO'` só se
+  `vaiTentarEmitir`. Fatura manual continua null (fora do ciclo de retry).
+- #3 — filtro do cron relaxado (removido `convenioContabilCobrancaId: { not:
+  null }`); select ganha `contrato: { select: { cooperadoId: true } }`;
+  `cooperadoAlvo = conv?.pagadorCooperadoId ?? c.contrato?.cooperadoId`;
+  descrição/nomeReferencia com fallback pro path regular.
+- 21/21 testes PASS.
+
+**REVISADO pelo orquestrador**: #1+#4 conferidos linha a linha (corretos —
+default SEM_GATEWAY preserva os 307). **PENDENTE review**: #2+#3 (cron
+financeiro serve agora 2 caminhos) ANTES do merge no main.
+
+**PERGUNTA ABERTA (responder na próxima sessão)**: o caminho de CONVÊNIO
+(`convenios-custeio`) notifica o cooperado ANTES de confirmar a emissão? Se
+sim, tem o mesmo bug e o gate #4 não alcança. **Grep desta sessão em
+`convenios/`: ZERO callers de `notificarCobrancaGerada`/`enviarFatura`** —
+indicativo forte de que NÃO notifica (delega ao cron via `AGUARDANDO_EMISSAO`).
+Confirmação formal pendente: onde/sob qual condição, não assumir.
+
+**#5+#6 NÃO iniciadas** — exigem `prisma db push` com PM2 parado
+(`@@unique([cobrancaId])` em `AsaasCobranca` + reconciliação de órfã).
+**TRAVADAS até WA estabilizar** (o daemon PM2 já perdeu tabela de processos
+uma vez esta semana; mexer no PM2 no meio do re-pareamento pode custar o QR).
+
+**Levar junto** `D-novo-PIX-EXCEDENTE-IDEMPOTENCIA` (P1, mesma família).
+
+═══ PRÓXIMO PASSO ÚNICO ═══
+
+Revisar #2+#3 no branch WIP + responder pergunta convênio → merge
+`wip/tarefa4-emissao-idempotencia` → main + push → **então** #5+#6 (schema
+change, exige WA estabilizado).
+
+═══ WHATSAPP — MUDO no fechamento ═══
+
+- QR NÃO escaneado. `auth_info` nova vazia, `/status = "failed"`.
+- **Rollback**: `whatsapp-service/auth_info.pre-repareamento-2207` (sessão
+  anterior intacta com 1.578 arquivos + `creds.json`).
+- **Se re-parear**: DEPOIS reaplicar ACL do Achado 4
+  (`D-novo-WA-REPAREAMENTO-PERDE-ACL` P2) — senão Achado 4 volta atrás.
+  Runbook:
+    - Backup: `icacls C:\Users\Luciano\cooperebr\whatsapp-service\auth_info /save auth_info.acl.pos-repareamento-<data>.bak /T`
+    - Re-aplicar: `icacls .../auth_info /inheritance:r /grant:r "Luciano:(OI)(CI)(F)" "SYSTEM:(OI)(CI)(F)" "Administradores:(OI)(CI)(F)" /T`
+    - Verificar: apenas 3 principals canônicos + zero herança `(I)`.
+- **Enquanto não parear**, Achado 4 fica meio-aberto.
+- **Diagnóstico já fechado** (5º cenário `D-novo-WA-DIAGNOSTICO-REPAREAR-PRECIPITADO`):
+  408 crônico + `creds.json` intacto + versão `isLatest=true` + rede OK
+  (`g.whatsapp.net:443` OK) = desassociação silenciosa do lado Meta. É o único
+  quadro em que re-parear é a resposta certa.
+
+═══ FASE 1 READ-ONLY JÁ FOI FEITA em 21/07 — REFERÊNCIA HISTÓRICA ═══
 
 Resultados travados (não re-inventar):
 
@@ -4329,29 +4447,41 @@ consolidado desde FASE 2 de 20/07 — resolver os 2 numa sessão só faz sentido
   `WA-WEBHOOK.*deprecated`, retirar o fallback `?secret=` do receptor
   (`whatsapp-fatura.controller.ts:100-111`).
 
-═══ Débitos abertos pra sessões dedicadas futuras ═══
+═══ Débitos ainda abertos ═══
 
-Grupo P2 mensageria/token/webhook (nenhum bloqueia Tarefa 4):
-`D-novo-CT-MLM-ATOMICO` (indicacoes atômico + cron reconciliação),
-`D-novo-WEBHOOK-PJ-SLOT-UNICO` (migrar listener compra-PJ pro WebhookEvent),
-`D-novo-CT3-CRON-RECONCILIACAO` (cron Cobranca-PAGO-sem-LancamentoContabil),
-`D-novo-MIGRATIONS-ABANDONADAS` (reconciliar `backend/prisma/migrations/` —
-JAMAIS `migrate dev` casual), `D-novo-WA-ZUMBI-PORTA-3002` (AMPLIADO —
-cobre daemon PM2 inteiro pós rpc.sock EPERM, não só :3002),
-`D-novo-WA-LOG-CHAVES-SESSAO`, `D-novo-RUNBOOK-CLIPBOARD-CONTAMINACAO`.
+**Único da lista original de deferidos que NÃO fechou hoje** (segue pra sessão
+futura de segurança): P3 `D-novo-BJ /uploads/` estático sem auth.
 
-Da Corretiva IDOR 21/07 tarde (7 novos): `D-novo-PIX-EXCEDENTE-SUPERADMIN-ORFAO`
+**Grupo P2 mensageria/token/webhook** (nenhum bloqueia Tarefa 4):
+`D-novo-CT-MLM-ATOMICO`, `D-novo-WEBHOOK-PJ-SLOT-UNICO`,
+`D-novo-CT3-CRON-RECONCILIACAO`, `D-novo-MIGRATIONS-ABANDONADAS`,
+`D-novo-WA-ZUMBI-PORTA-3002`, `D-novo-WA-LOG-CHAVES-SESSAO`,
+`D-novo-RUNBOOK-CLIPBOARD-CONTAMINACAO`.
+
+**Corretiva IDOR 21/07 tarde (7 novos)**: `D-novo-PIX-EXCEDENTE-SUPERADMIN-ORFAO`
 (P1), `D-novo-PIX-EXCEDENTE-IDEMPOTENCIA` (P1 — LEVAR JUNTO NA TAREFA 4),
 `D-novo-PIX-EXCEDENTE-SUBTOTAIS-IMPOSTO` (P2), `D-novo-ASAAS-LOG-PIXCHAVE-VAZAMENTO`
-(P3), `D-novo-EMAILMONITOR-IDENTIFICARPOROCR` (P3), `D-novo-CLUBE-VANTAGENS-QCOOPID-PADRAO`
-(P3), `D-novo-TESTS-DRIFT-DOCUMENTOCOOPERADO` (P3).
+(P3), `D-novo-EMAILMONITOR-IDENTIFICARPOROCR` (P3),
+`D-novo-CLUBE-VANTAGENS-QCOOPID-PADRAO` (P3),
+`D-novo-TESTS-DRIFT-DOCUMENTOCOOPERADO` (P3).
 
-Do incidente DHCP (2 novos): `D-novo-API-URL-IP-CONGELADO` (P2 —
-NEXT_PUBLIC_API_URL bakeado no build quebra login em cada troca de DHCP),
-`D-novo-LOGIN-ERRO-ENGANOSO` (P2 UX — network error mostrado como "senha
-inválida").
+**Incidente DHCP (2 novos)**: `D-novo-API-URL-IP-CONGELADO` (P2),
+`D-novo-LOGIN-ERRO-ENGANOSO` (P2 UX).
 
-Tarefas 6/7/8 (email OCR move seletivo, sender WA/email status inspection,
+**Catalogados hoje 22/07 (3 novos)**:
+- P3 `D-novo-WA-DIAGNOSTICO-REPAREAR-PRECIPITADO` (manhã) — 5 cenários.
+- P2 `D-novo-WA-REPAREAMENTO-PERDE-ACL` (tarde) — runbook pós-scan pra re-aplicar
+  ACL do Achado 4.
+- P3 `D-novo-AGENTS-SUBSISTEMA-ORFAO` (tarde) — sprint AgentsModule pausado
+  preservado em `wip/agents-subsistema-1106` (commit `46255c2`); retomada:
+  `git checkout wip/agents-subsistema-1106`.
+
+**Sprints/branches em WIP** (aguardando retomada):
+- `wip/agents-subsistema-1106` (46255c2) — Modulo IAG + PolicyEngine + 3 subsistemas (não relacionado à Tarefa 4).
+- `wip/tarefa4-emissao-idempotencia` (4c929cf) — correções #1-#4 da Tarefa 4 (a próxima frente).
+- `feature/mascara-email-convenio` (7745082) — Sprint máscara e-mail pausada 14/07 (piloto Santi ATIVO no banco).
+
+**Tarefas 6/7/8** (email OCR move seletivo, sender WA/email status inspection,
 fatura OCR schema zod).
 ```
 
