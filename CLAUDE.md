@@ -1,3 +1,9 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
 # Instruções permanentes — Claude Code no CoopereBR
 
 ## Ritual de abertura e fechamento de sessão
@@ -238,6 +244,175 @@ Membros dos parceiros pagam seus parceiros (não pagam Luciano).
 Detalhes em `docs/COOPEREBR-ALINHAMENTO.md` e `docs/PRODUTO.md` (visão humana atual).
 Histórico: `docs/historico/SISGD-VISAO-COMPLETA-2026-04-26.md`.
 
+## Arquitetura em alto nível
+
+Monorepo de 3 serviços + Postgres compartilhado. Cada serviço tem seu próprio
+`package.json`; nenhuma ferramenta de workspaces — comandos rodam dentro do
+diretório do serviço.
+
+```
+backend/           NestJS 11 — API REST → http://localhost:3000  (PM2: cooperebr-backend)
+web/               Next.js 16 (App Router, React 19) → http://localhost:3001
+whatsapp-service/  Bot Node ESM (index.mjs) → http://localhost:3002  (PM2: cooperebr-whatsapp)
+tests/             Playwright E2E (raiz) — depende dos 3 serviços de pé
+docs/              Documentação viva (PRODUTO, MAPA-INTEGRIDADE, PLANO, sessões)
+scripts/           Utilitários standalone (ts-node direto, fora do build NestJS)
+legado/            Sistema antigo — referência, não tocar sem pedido explícito
+```
+
+**Banco:** PostgreSQL via Prisma ORM. Schema único em
+`backend/prisma/schema.prisma` (~2200 linhas, 70+ models). `DATABASE_URL` +
+`DIRECT_URL` (Supabase pgbouncer).
+
+**Multi-tenant por tenant column.** Tabela `Cooperativa` é a tenant root;
+**toda** query Prisma filtra por `cooperativaId` (vindo do JWT, nunca do body).
+Perfil `SUPER_ADMIN` é o único que vê cross-tenant — usar com cuidado.
+
+**Backend (`backend/src/`)** é um único `app.module.ts` que importa ~50 módulos
+de domínio. Padrão NestJS clássico (`<dominio>.module.ts` +
+`.controller.ts` + `.service.ts` + `dto/`). Auth global via `JwtAuthGuard` +
+`RolesGuard` + `ModuloGuard` registrados como `APP_GUARD`. Throttler global
+100 req/min. `PrismaService` é singleton injetado.
+
+**Cluster de domínios** (referência rápida pra navegar):
+- **Núcleo do negócio:** `cooperados`, `contratos`, `ucs`, `usinas`,
+  `cobrancas`, `faturas`, `motor-proposta`
+- **Financeiro:** `financeiro`, `configuracao-cobranca`, `geracao-mensal`,
+  `contas-pagar`, `asaas`, `gateway-pagamento`, `integracao-bancaria`,
+  `bandeira-tarifaria`, `modelos-cobranca`
+- **Comunicação:** `whatsapp`, `notificacoes`, `email`, `email-monitor`,
+  `modelos-mensagem`
+- **Comercial:** `convenios`, `cooper-token`, `clube-vantagens`, `indicacoes`,
+  `convite-indicacao`, `lead-expansao`, `conversao-credito`
+- **Plataforma/SaaS:** `cooperativas`, `auth`, `saas`, `planos`,
+  `config-tenant`, `publico`, `observador`, `relatorios`, `documentos`,
+  `fluxo-etapas`, `prestadores`, `administradoras`, `condominios`,
+  `monitoramento-usinas`, `migracoes-usina`, `ocorrencias`
+
+**Entidade central — Contrato:**
+```
+Cooperado ←→ Contrato ←→ UC          Contrato define: kwhContratoAnual,
+                ↕                    percentualUsina, desconto (modelo Plano)
+              Usina
+                ↕
+            Cobrança (mensal)
+```
+
+**Frontend (`web/`):** Next.js App Router. Rotas por persona:
+`app/dashboard/` (admin parceiro), `app/portal/` (cooperado),
+`app/parceiro/` + `app/proprietario/` + `app/observador/` (outros perfis),
+`app/cadastro/` + `app/convite/` + `app/aprovar-proposta/` (público).
+Componentes: Shadcn/UI + Tailwind 4 + Radix (`@base-ui/react`). Hooks
+multi-tenant em `web/hooks/` — sempre usar `useTipoParceiro()` antes de
+renderizar termo de "membro" (ver "Vocabulário multi-tipo" abaixo).
+
+**WhatsApp service:** processo separado pra isolar a sessão Baileys. Bot
+conversacional + CoopereAI; estados de conversa **persistidos no banco**,
+nunca em memória. Identifica tenant pelo telefone do cooperado.
+
+**OCR de faturas:** Anthropic Claude SDK (`@anthropic-ai/sdk` no backend)
+chamado dentro de `faturas/` e `email-monitor/`. Pipeline IMAP → detecção
+automática → OCR → vinculação UC.
+
+**Pagamentos:** Asaas (PIX + boleto) atrás do adapter
+`gateway-pagamento/`. **Nunca chamar `AsaasService` direto de fora do módulo
+`asaas/`** — usar `GatewayPagamentoService`. Exceção documentada:
+`pix-excedente.service.ts`. Webhook Asaas usa HMAC-SHA256.
+Flag `ASAAS_PIX_EXCEDENTE_ATIVO` — **não ativar em prod sem instrução
+explícita de Luciano.**
+
+**Regras de domínio detalhadas:** `.claude/rules/` (multi-tenant, financeiro,
+código, arquitetura). Spec dos módulos comerciais grandes:
+`docs/especificacao-clube-cooper-token.md`, `-contabilidade-clube.md`,
+`-modelos-cobranca.md`. Regulatório ANEEL: `docs/REGULATORIO-ANEEL.md`.
+
+## Comandos comuns (build, lint, testes, dev)
+
+Os 3 serviços têm scripts npm próprios. Sempre `cd` no serviço antes.
+PowerShell: encadear com `;` (não `&&`). Os fluxos de PM2/rebuild estão
+detalhados mais abaixo em "Infraestrutura local".
+
+### Backend (`backend/`)
+
+| Ação | Comando |
+|---|---|
+| Build (regenera `dist/`) | `npm run build` |
+| Lint + autofix | `npm run lint` |
+| Format Prettier | `npm run format` |
+| Dev local (**evitar — usar PM2**) | `npm run start:dev` |
+| Produção (PM2 roda isto) | `npm run start:prod` (= `node dist/main`) |
+| Unit tests (Jest) | `npm test` |
+| Test em watch | `npm run test:watch` |
+| Coverage | `npm run test:cov` |
+| E2E (Jest config próprio) | `npm run test:e2e` |
+| Um teste específico | `npm test -- caminho/parcial-do-arquivo` |
+| Seed Postgres | `npm run seed` |
+| API smoke test | `npm run test:api` |
+
+Scripts utilitários standalone ficam em `backend/scripts/`, **fora do
+build** (`tsconfig.build.json` exclui), e rodam via `ts-node` direto.
+
+### Frontend (`web/`)
+
+| Ação | Comando |
+|---|---|
+| Dev (terminal vivo, porta 3001) | `npm run dev` |
+| Build produção | `npm run build` |
+| Start produção | `npm start` |
+| Lint Next/ESLint | `npm run lint` |
+
+Frontend **não roda sob PM2 em desenvolvimento.** Se o terminal fecha, o
+frontend cai — abrir novo terminal e relançar.
+
+### Prisma (`backend/`)
+
+| Ação | Comando |
+|---|---|
+| Regerar client | `npx prisma generate` |
+| Sincronizar schema → DB (**só dev**) | `npx prisma db push` |
+| Criar migration (preferir em prod) | `npx prisma migrate dev --name <nome>` |
+| Prisma Studio | `npx prisma studio` |
+
+Antes de `prisma generate` ou `db push`: **parar o PM2** (`pm2 stop
+cooperebr-backend`), confirmar porta 3000 livre, rodar, reiniciar PM2. Sem
+isso o engine `query_engine_bg.wasm` fica lockado (EPERM). Detalhes na
+seção "Infraestrutura local".
+
+Antes de qualquer alteração destrutiva de schema (tipo de campo, NOT NULL,
+deletar, renomear, unique/index, default), seguir o checklist da seção
+"Regras de segurança para migrations" — incidente de 26/04 perdeu 96
+valores por pular auditoria prévia.
+
+### Testes E2E Playwright (raiz `tests/`)
+
+Suite separada da raiz que valida o sistema rodando ponta-a-ponta. Exige
+backend (3000), frontend (3001) e Postgres no ar.
+
+| Ação | Comando (do diretório raiz) |
+|---|---|
+| Rodar suite completa | `npm test` (= `playwright test --config tests/playwright.config.ts`) |
+| Abrir HTML report | `npm run test:report` |
+| Spec único | `npx playwright test tests/03-portal-cooperado.spec.ts` |
+| Grep por nome | `npx playwright test -g "login"` |
+| Modo UI | `npx playwright test --ui` |
+
+Specs ficam em `tests/NN-nome.spec.ts` (prefixo numérico ordena execução).
+Helpers em `tests/helpers/`. Há um runner PowerShell `tests/run-qa.ps1`
+e o slash command `/qa-run` que dispara a suite.
+
+### PM2 (backend + whatsapp em desenvolvimento)
+
+| Ação | Comando |
+|---|---|
+| Ver status | `pm2 list` |
+| Logs backend | `pm2 logs cooperebr-backend --lines 30` |
+| Parar backend | `pm2 stop cooperebr-backend` |
+| Reiniciar backend | `pm2 restart cooperebr-backend` |
+| Logs WhatsApp | `pm2 logs cooperebr-whatsapp --lines 30` |
+
+Config em `ecosystem.config.cjs` (raiz). **NUNCA `npm run start:dev`
+direto** — PM2 respawna e cria zumbis.
+
 ## Vocabulário multi-tipo (regra dura)
 
 SISGD atende 4 tipos de parceiro, cada um com nome próprio pra "membro":
@@ -304,14 +479,27 @@ canônicas por perfil** (mapeadas em `hooks/useContexto.ts:rotaPorContexto`):
 
 ## Sprint atual
 
-Sprint 13a P0 e Dia 1 fechados (28/04/2026). Painel SISGD `/dashboard/super-admin` operacional.
+Última sessão Code: **maratona 11/05/2026** — 9 commits, 4 fases técnicas + 4
+documentais (Fase C.2 reduzida, Fase C.3 display economia projetada, UI
+etapa 11 aprovação concessionária, Sprint 0 passos iniciais). Detalhes em
+`docs/sessoes/2026-05-11-execucao-maratona.md`.
 
-**Próximo: Sprint 13a Dia 2** — lista de parceiros enriquecida + filtros + smoke test.
+**Próxima sessão Code (prioridade):** investigar **D-31** —
+`Contrato.percentualUsina` zerado/irrealista no banco (descoberto na
+auditoria Sprint 0). É P1 crítico provisório, **bloqueia Sprint 5 + canário**
+(sem dado confiável de concentração, a flag `concentracaoMaxPorCooperadoUsina`
+opera sobre input furado). 2-4h Code.
 
-Sprint 13 foi dividido em 3 fatias entregáveis (não monolítico):
-- **13a** (em andamento) — Painel super-admin (Dia 1 ✅, Dia 2 e 3 pendentes)
-- **13b** — AuditLog ativo (interceptor) + Impersonate completo
-- **13c** — Edição de plano SaaS pelo painel + suspensão de parceiro
+**Alternativas de fila** (se Luciano repriorizar):
+1. Sprint CooperToken Consolidado Etapa 1 — specs Jest do módulo
+   `cooper-token/` (zero hoje, pré-requisito P0 do refator, 6-8h)
+2. Decisões batch B17-B32 (claude.ai)
+3. Asaas conta produção (operacional, depende Luciano abrir)
+4. Backfill 72 contratos legados (only-if-needed)
+5. Canário 1 cooperado real CoopereBR (depende D-31)
+6. Sprint 0 completo (cron + dashboard `/dashboard/super-admin/auditoria-regulatoria`)
+
+Frase de retomada: "Iniciando investigação D-31 — `percentualUsina` no banco".
 
 ## Módulo Clube + CooperToken
 
@@ -505,41 +693,62 @@ Regra criada após sessão de 2026-04-28: PM2 do `cooperebr-backend`
 chegou a 331 restarts acumulados (alguns pela manhã por node órfão,
 outros à noite por reaproveitamento acidental do histórico PowerShell).
 
-## Estado atual do projeto (atualizado 2026-04-28)
+## Estado atual do projeto (atualizado 2026-05-11)
 
-Sprint 13a P0 + Dia 1 concluídos. Painel SISGD operacional em `/dashboard/super-admin`.
+Sprints 1-13a fechados. Fases A + B + B.5 + C.1 + C.1.1 + C.2 reduzida + C.3
+de Planos comerciais concluídas. UI etapa 11 (aprovação concessionária)
+destravada com cooperado real CoopereBR. Sprint 0 (auditoria regulatória
+emergencial) com passos iniciais executados — relatório de concentração
+>25% gerado, 0 casos detectados nos 62 contratos atuais.
 
-**Banco final:**
-- 2 cooperativas: **CoopereBR** (produção, plano OURO, 307 cooperados / 299 ATIVOS) + **CoopereBR Teste** (TRIAL, plano PRATA, 4 cooperados ATIVOS)
-- 1 FaturaSaas PENDENTE (CoopereBR Teste, R$ 5.900, vencida 10/04 — para validar painel de inadimplência)
-- AuditLog table criada (vazia — ativação no Sprint 13b com interceptor)
-- 4 índices cross-tenant criados em `cobrancas`, `cooperados`, `faturas_saas`
+**Sessão Code maratona 11/05 (9 commits):**
+- UI etapa 11 — endpoint dedicado `POST /cooperados/:id/aprovar-concessionaria`
+  + DTO `@MinLength(3)` + service multi-tenant (SUPER_ADMIN bypass) +
+  Dialog admin + 6 specs. Destravou MARCIO MACIEL (CoopereBR real).
+  (Commit `8853d97`)
+- Fase C.2 reduzida — 5 itens UI plano avançada + `validacoes-plano.ts` (20
+  specs ts-node) + snapshot/confirmação salvar via `_count.contratos`
+  filtrado por tenant. (Commit `6d2510e`)
+- Fase C.3 — `<EconomiaProjetada>` reusável (29 specs ts-node) em cobrança +
+  contrato (recálculo via `simular-plano`) + proposta. (Commit `ecf39cd`)
+- D-30Y resolvido — validação E2E manual `/aprovar-proposta` (2 propostas
+  teste, 2 screenshots). (Commit `fecbe2a`)
+- Adendo §11 spec CooperToken — 5 achados validados via Decisão 21 + D-30Z
+  catalogado (85 cooperados em estado intermediário). (Commit `69902f6`)
+- Sprint 0 passos iniciais — relatório auditoria concentração >25% (62
+  contratos, 0 casos). **D-31 (P1 crítico) descoberto:**
+  `Contrato.percentualUsina` zerado/irrealista no banco. (Commit `851a39e`)
+- Fechamento — sessão + plano + controle + débitos. (Commit `49abb80`)
 
-**Sprint 13a Dia 1 entregou:**
-- `MetricasSaasService` + endpoint `GET /saas/dashboard` (gated SUPER_ADMIN)
-- Tela `/dashboard/super-admin` com 5 cards (parceiros, membros, faturado, MRR, alerta inadimplência + hero incêndios)
-- Sidebar reorganizada com link "Painel SISGD" em "Gestão Global"
-- Refactor `gerarFaturaParaCooperativa` exposto como público (commit `0d53773`)
+**Débitos novos da sessão:**
+- **D-31 (P1 provisório crítico)** — `percentualUsina` zerado, bloqueia
+  Sprint 5 + canário
+- D-30W (P2) — aprovação admin automatizada pós Sprint 5+8
+- D-30X (P3) — whitelist LGPD bypass `NODE_ENV`
+- D-30Z (P3) — 85 cooperados em migração intermediária `opcaoToken → modoRemuneracao`
+- D-30Y **RESOLVIDO**
 
-**Conquistas históricas do Sprint 10 (preservar):**
-- Primeiro email SMTP funcional (email_logs.status=ENVIADO passou de 0 pra 1+)
-- Primeiro WhatsApp automático pós-reativação
-- LGPD compliance (whitelist dev + flag ambienteTeste + 112 registros mascarados)
-- CADASTRO_V2 desbloqueado
-
-**Conquistas Sprint 11 e 12:**
-- Sprint 11: Arquitetura UC consolidada (numero/numeroUC/distribuidora/numeroConcessionariaOriginal), pipeline OCR multi-campo, E2E fatura Luciano
-- Sprint 12: Webhook Asaas validado em sandbox + 3 bugs corrigidos (CLUBE dupla bonificação, percentualDesconto, dataVencimento)
+**Conquistas históricas preservadas:**
+- Sprint 10 (25/04): primeiro email SMTP, primeiro WhatsApp automático,
+  LGPD compliance (112 registros mascarados), CADASTRO_V2 desbloqueado
+- Sprint 11 (abr/26): arquitetura UC consolidada
+  (numero/numeroUC/distribuidora/numeroConcessionariaOriginal), pipeline OCR
+  multi-campo
+- Sprint 12: webhook Asaas validado em sandbox + 3 bugs corrigidos
+- Sprint 13a: painel SISGD `/dashboard/super-admin` operacional
+- Fases A/B/B.5/C.1 de Planos (03/05 maratona, 20 commits, E2E 48/48,
+  D-30R + duplo desconto + DINAMICO + snapshots resolvidos)
 
 Documentos vivos permanentes (ler ao iniciar sessão):
-- docs/MAPA-INTEGRIDADE-SISTEMA.md (atualizar a cada sprint)
-- docs/PLANO-ATE-PRODUCAO.md (roteiro de sprints até produção)
-- docs/COOPEREBR-ALINHAMENTO.md
-- docs/PRODUTO.md (visão humana do produto — substitui SISGD-VISAO movido pra histórico em 03/05/2026)
-- docs/debitos-tecnicos.md (P1/P2/P3 vivos)
-- docs/especificacao-clube-cooper-token.md
-- docs/especificacao-contabilidade-clube.md
-- docs/especificacao-modelos-cobranca.md
-- CLAUDE.md (este arquivo)
-
-Próximo passo: **Sprint 13a Dia 2** — lista de parceiros enriquecida com filtros e smoke test. Frase de retomada: "Iniciando Sprint 13a Dia 2 — lista parceiros + filtros".
+- `docs/CONTROLE-EXECUCAO.md` — **estado vivo, seção "ONDE PARAMOS"
+  atualizada a cada sessão**
+- `docs/MAPA-INTEGRIDADE-SISTEMA.md` (atualizar a cada sprint)
+- `docs/PLANO-ATE-PRODUCAO.md` (roteiro até produção)
+- `docs/PRODUTO.md` (visão humana — substitui SISGD-VISAO movido pra histórico em 03/05/2026)
+- `docs/COOPEREBR-ALINHAMENTO.md`
+- `docs/REGULATORIO-ANEEL.md`
+- `docs/debitos-tecnicos.md` (P0/P1/P2/P3 vivos)
+- `docs/especificacao-clube-cooper-token.md`
+- `docs/especificacao-contabilidade-clube.md`
+- `docs/especificacao-modelos-cobranca.md`
+- `CLAUDE.md` (este arquivo)
