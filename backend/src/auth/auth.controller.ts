@@ -1,7 +1,9 @@
-import { Controller, Post, Get, Put, Delete, Body, Param, UnauthorizedException, HttpCode } from '@nestjs/common';
+import { Controller, Post, Get, Put, Delete, Body, Param, UnauthorizedException, HttpCode, Req } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import type { Request } from 'express';
 import * as crypto from 'crypto';
 import { AuthService } from './auth.service';
+import { LoginCodigoService } from './login-codigo.service';
 import { Public } from './public.decorator';
 import { CurrentUser } from './current-user.decorator';
 import { Roles } from './roles.decorator';
@@ -14,9 +16,19 @@ import { AlterarSenhaDto } from './dto/alterar-senha.dto';
 import { CriarUsuarioDto } from './dto/criar-usuario.dto';
 import { AtualizarUsuarioDto } from './dto/atualizar-usuario.dto';
 
+/** IP real do usuário: o nginx da VM grava em X-Real-IP (X-Forwarded-For pode vir forjado). */
+function ipCliente(req: Request): string {
+  const real = req.headers['x-real-ip'];
+  if (typeof real === 'string' && real.trim()) return real.trim();
+  return req.ip || '';
+}
+
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly loginCodigo: LoginCodigoService,
+  ) {}
 
   @Public()
   @Throttle({ default: { ttl: 60000, limit: 20 } })
@@ -46,6 +58,24 @@ export class AuthController {
     },
   ) {
     return this.authService.login(body.identificador, body.senha);
+  }
+
+  // Login por código (celular/e-mail) com a base de beneficiários da CoopereBR.
+  // Ver login-codigo.service.ts.
+  @Public()
+  @Throttle({ default: { ttl: 300000, limit: 5 } })
+  @HttpCode(200)
+  @Post('codigo/solicitar')
+  solicitarCodigo(@Body() body: { identificador: string }, @Req() req: Request) {
+    return this.loginCodigo.solicitar(body?.identificador, ipCliente(req));
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 300000, limit: 10 } })
+  @HttpCode(200)
+  @Post('codigo/validar')
+  validarCodigo(@Body() body: { identificador: string; codigo: string }, @Req() req: Request) {
+    return this.loginCodigo.validar(body?.identificador, body?.codigo, ipCliente(req));
   }
 
   @Public()

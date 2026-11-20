@@ -5,7 +5,12 @@ import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight, Leaf, LockKeyhole, ShieldCheck, Sparkles, UserPlus } from 'lucide-react';
-import { login } from '@/lib/auth';
+import {
+  login,
+  solicitarCodigoLogin,
+  validarCodigoLogin,
+  type SolicitarCodigoResposta,
+} from '@/lib/auth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,19 +58,46 @@ const CRED_EMPRESA: CredTeste = {
 // NEXT_PUBLIC_AMBIENTE_REAL não definido OU 'false' → dev → mostra box.
 const isProducao = process.env.NEXT_PUBLIC_AMBIENTE_REAL === 'true';
 
+type Modo = 'codigo' | 'senha';
+
+function mensagemErro(e: unknown, padrao: string): string {
+  const data = (e as { response?: { data?: { message?: unknown } } })?.response?.data;
+  const msg = data?.message;
+  if (typeof msg === 'string' && msg.trim()) return msg;
+  if (Array.isArray(msg) && typeof msg[0] === 'string') return msg[0];
+  return padrao;
+}
+
+function codigoErro(e: unknown): string | undefined {
+  return (e as { response?: { data?: { codigo?: string } } })?.response?.data?.codigo;
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  const [modo, setModo] = useState<Modo>('codigo');
   const [identificador, setIdentificador] = useState('');
   const [senha, setSenha] = useState('');
+  const [codigo, setCodigo] = useState('');
+  const [codigoEnviado, setCodigoEnviado] = useState<SolicitarCodigoResposta | null>(null);
   const [erro, setErro] = useState('');
+  const [semCadastro, setSemCadastro] = useState(false);
   const [carregando, setCarregando] = useState(false);
 
   function preencherCred(c: CredTeste) {
+    setModo('senha');
     setIdentificador(c.email);
     setSenha(c.senha);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  function trocarModo(m: Modo) {
+    setModo(m);
+    setErro('');
+    setSemCadastro(false);
+    setCodigo('');
+    setCodigoEnviado(null);
+  }
+
+  async function handleSenha(e: React.FormEvent) {
     e.preventDefault();
     setErro('');
     setCarregando(true);
@@ -78,6 +110,41 @@ export default function LoginPage() {
       setCarregando(false);
     }
   }
+
+  async function handleSolicitar(e?: React.FormEvent) {
+    e?.preventDefault();
+    setErro('');
+    setSemCadastro(false);
+    setCarregando(true);
+    try {
+      const r = await solicitarCodigoLogin(identificador);
+      setCodigoEnviado(r);
+      setCodigo('');
+    } catch (err) {
+      setErro(mensagemErro(err, 'Não foi possível enviar o código. Tente novamente.'));
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  async function handleValidar(e: React.FormEvent) {
+    e.preventDefault();
+    setErro('');
+    setCarregando(true);
+    try {
+      await validarCodigoLogin(identificador, codigo);
+      router.push('/selecionar-contexto');
+    } catch (err) {
+      if (codigoErro(err) === 'NAO_BENEFICIARIO_COOPEREBR') setSemCadastro(true);
+      setErro(mensagemErro(err, 'Código inválido. Confira ou peça um novo.'));
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  const destinoCodigo = codigoEnviado
+    ? codigoEnviado.telefoneMascarado || codigoEnviado.emailMascarado || 'seu contato cadastrado'
+    : '';
 
   return (
     <div className="min-h-screen bg-[#f6f8f2] text-[#111814]">
@@ -161,12 +228,92 @@ export default function LoginPage() {
                     Entrar na area do cliente
                   </CardTitle>
                   <CardDescription className="mt-2 text-[#667062]">
-                    Use seu email, CPF ou telefone para acessar o sistema do Clube.
+                    {modo === 'codigo'
+                      ? 'Use o mesmo celular ou e-mail do app COOPERE-BR. Enviaremos um código de acesso.'
+                      : 'Use seu email, CPF ou telefone e sua senha.'}
                   </CardDescription>
                 </div>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            {modo === 'codigo' && !codigoEnviado && (
+              <form onSubmit={handleSolicitar} className="space-y-4">
+                <div className="space-y-1">
+                  <Label htmlFor="identificador">Celular ou e-mail</Label>
+                  <Input
+                    id="identificador"
+                    type="text"
+                    inputMode="email"
+                    autoComplete="username"
+                    placeholder="(27) 99999-9999 ou seu@email.com"
+                    value={identificador}
+                    onChange={(e) => setIdentificador(e.target.value)}
+                    required
+                    autoFocus
+                  />
+                </div>
+                {erro && <p className="text-sm text-red-600">{erro}</p>}
+                <Button type="submit" className="w-full" disabled={carregando}>
+                  {carregando ? 'Enviando...' : 'Receber código'}
+                </Button>
+              </form>
+            )}
+
+            {modo === 'codigo' && codigoEnviado && (
+              <form onSubmit={handleValidar} className="space-y-4">
+                <p className="rounded-lg bg-[#f6f8f2] px-3 py-2 text-sm text-[#4b5546]">
+                  Se houver cadastro, enviamos um código de 6 dígitos para{' '}
+                  <strong>{destinoCodigo}</strong>.
+                </p>
+                <div className="space-y-1">
+                  <Label htmlFor="codigo">Código</Label>
+                  <Input
+                    id="codigo"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    placeholder="000000"
+                    value={codigo}
+                    onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    required
+                    autoFocus
+                    className="text-center text-lg tracking-[0.4em]"
+                  />
+                </div>
+                {erro && <p className="text-sm text-red-600">{erro}</p>}
+                {semCadastro && (
+                  <Link
+                    href="/entrar"
+                    className="block rounded-lg bg-[#166534] px-3 py-2 text-center text-sm font-semibold text-white"
+                  >
+                    Fazer meu cadastro no clube
+                  </Link>
+                )}
+                <Button type="submit" className="w-full" disabled={carregando || codigo.length !== 6}>
+                  {carregando ? 'Entrando...' : 'Acessar Clube COOPERE-BR'}
+                </Button>
+                <div className="flex justify-between text-sm">
+                  <button
+                    type="button"
+                    className="text-[#166534] hover:underline"
+                    onClick={() => trocarModo('codigo')}
+                  >
+                    Trocar celular/e-mail
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[#166534] hover:underline disabled:opacity-50"
+                    disabled={carregando}
+                    onClick={() => handleSolicitar()}
+                  >
+                    Reenviar código
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {modo === 'senha' && (
+            <form onSubmit={handleSenha} className="space-y-4">
               <div className="space-y-1">
                 <Label htmlFor="identificador">Email / CPF / Telefone</Label>
                 <Input
@@ -200,6 +347,25 @@ export default function LoginPage() {
                 {carregando ? 'Entrando...' : 'Acessar Clube COOPERE-BR'}
               </Button>
 
+              <div className="text-center">
+                <Link href="/esqueci-senha" className="text-sm text-green-700 hover:underline">
+                  Esqueci minha senha
+                </Link>
+              </div>
+            </form>
+            )}
+
+            <div className="mt-4 space-y-4">
+              <div className="text-center">
+                <button
+                  type="button"
+                  className="text-sm text-[#4b5546] hover:underline"
+                  onClick={() => trocarModo(modo === 'codigo' ? 'senha' : 'codigo')}
+                >
+                  {modo === 'codigo' ? 'Entrar com senha (equipe)' : 'Entrar com código pelo celular/e-mail'}
+                </button>
+              </div>
+
               <div className="rounded-xl border border-[#dfe5d8] bg-[#f6f8f2] p-3 text-center">
                 <p className="text-sm font-medium text-[#101510]">Ainda nao faz parte do clube?</p>
                 <Link
@@ -211,13 +377,7 @@ export default function LoginPage() {
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
-
-              <div className="text-center">
-                <Link href="/esqueci-senha" className="text-sm text-green-700 hover:underline">
-                  Esqueci minha senha
-                </Link>
-              </div>
-            </form>
+            </div>
 
             {/* Box dev-only de credenciais de teste — Sprint Portal Empresa 9.0
                 + ajuste Fatia F-G1 (05/06): 2 contas (SUPER_ADMIN + Empresa).

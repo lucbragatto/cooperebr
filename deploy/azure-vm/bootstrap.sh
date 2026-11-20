@@ -49,6 +49,11 @@ ANTHROPIC_API_KEY=
 OCR_MODEL=claude-sonnet-4-6
 COOPEREAI_MODEL=claude-haiku-4-5-20251001
 COOPEREAI_MAX_TOKENS=512
+# Login por código com a base de beneficiários CoopereBR (Function func-cadastro-benef, escopo Login)
+CADASTRO_BENEF_API_URL=https://func-cadastro-benef.azurewebsites.net/api
+CADASTRO_BENEF_API_KEY=${CADASTRO_BENEF_API_KEY:-}
+CLUBE_COOPERATIVA_ID=${CLUBE_COOPERATIVA_ID:-}
+CLUBE_SISTEMAS_PERMITIDOS=2
 ENV
 
 cat > "$APP_DIR/web/.env" <<ENV

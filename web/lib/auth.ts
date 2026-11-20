@@ -34,6 +34,29 @@ export async function login(identificador: string, senha: string): Promise<void>
   Cookies.set(USUARIO_KEY, JSON.stringify(data.usuario), COOKIE_OPTS);
 }
 
+export type SolicitarCodigoResposta = {
+  ok: boolean;
+  canal: 'telefone' | 'email';
+  telefoneMascarado: string | null;
+  emailMascarado: string | null;
+  expiraEmSegundos: number;
+};
+
+/** Login por código: envia SMS/e-mail pela base de beneficiários da CoopereBR. */
+export async function solicitarCodigoLogin(identificador: string): Promise<SolicitarCodigoResposta> {
+  const { data } = await api.post<SolicitarCodigoResposta>('/auth/codigo/solicitar', { identificador });
+  return data;
+}
+
+/** Confere o código; se o beneficiário ainda não existe no clube, o backend cria o cadastro. */
+export async function validarCodigoLogin(identificador: string, codigo: string): Promise<void> {
+  const { data } = await api.post<AuthResponse>('/auth/codigo/validar', { identificador, codigo });
+  Cookies.set(TOKEN_KEY, data.token, COOKIE_OPTS);
+  Cookies.set(USUARIO_KEY, JSON.stringify(data.usuario), COOKIE_OPTS);
+  localStorage.removeItem('contexto_ativo');
+  localStorage.removeItem('contexto_ativo_id');
+}
+
 /**
  * D-novo-BM (29/05/2026) — Aplica sessão de um token + usuario recebidos do
  * endpoint `/auth/dev/impersonate`. NÃO chamar em código de produção.

@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { AuthDevController } from './auth-dev.controller';
 import { AuthService } from './auth.service';
+import { LoginCodigoService } from './login-codigo.service';
 import { JwtStrategy } from './jwt.strategy';
 import { PrismaService } from '../prisma.service';
 import { FacialModule } from './facial/facial.module';
@@ -21,7 +22,7 @@ import { getJwtSecret } from './jwt-secret';
     WhatsappModule,
   ],
   controllers: [AuthController, AuthDevController],
-  providers: [AuthService, JwtStrategy, PrismaService],
+  providers: [AuthService, LoginCodigoService, JwtStrategy, PrismaService],
   exports: [JwtModule],
 })
 export class AuthModule {}
