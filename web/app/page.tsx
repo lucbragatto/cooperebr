@@ -30,7 +30,7 @@ const pilares = [
   },
   {
     titulo: 'Beneficio do jeito do cliente',
-    texto: 'O membro pode receber desconto direto ou transformar parte do valor em CooperTokens para usar no clube.',
+    texto: 'O membro recebe ate 20% da fatura em CooperTokens para usar nos parceiros. Quem preferir pode optar pelo desconto direto.',
     icon: WalletCards,
   },
   {
@@ -46,8 +46,8 @@ const pilares = [
 ];
 
 const beneficiosCliente = [
-  'Desconto na fatura de energia',
-  'CooperTokens para abater cobrancas',
+  'Ate 20% da fatura de volta em CooperTokens',
+  'CooperTokens para usar nos parceiros e abater cobrancas',
   'Pagamento por QR Code em parceiros',
   'Ofertas e resgates no Clube de Vantagens',
   'Ranking, niveis e progressao por indicacoes',
@@ -158,8 +158,8 @@ export default function Home() {
             </h1>
 
             <p className="mt-6 max-w-2xl text-lg leading-8 text-white/74 sm:text-xl">
-              O cliente economiza energia, acompanha tudo pelo portal e escolhe como quer receber
-              beneficio: desconto direto, CooperTokens, ofertas, parceiros e indicacoes.
+              O cliente recebe ate 20% da fatura em CooperTokens para usar nos parceiros do clube,
+              acompanha tudo pelo portal e ainda ganha com ofertas e indicacoes.
             </p>
 
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
@@ -212,25 +212,31 @@ export default function Home() {
 
               <div className="space-y-3 p-4">
                 <div className="rounded-lg bg-[#101510] p-4 text-white">
-                  <p className="text-sm text-white/62">Economia solar estimada</p>
+                  <p className="text-sm text-white/62">Retorno da sua fatura em CooperTokens</p>
                   <div className="mt-3 flex items-end justify-between gap-4">
-                    <p className="text-4xl font-semibold">ate 20%</p>
+                    <p className="text-4xl font-semibold">
+                      ate 20%
+                      <span className="ml-2 text-base font-medium text-white/62">da fatura</span>
+                    </p>
                     <span className="rounded-full bg-[#d7ff65] px-3 py-1 text-xs font-semibold text-[#102012]">
-                      elegivel
+                      em tokens
                     </span>
                   </div>
+                  <p className="mt-3 text-xs leading-5 text-white/58">
+                    Para usar nos parceiros do clube.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-lg border border-[#dfe5d8] bg-[#f7f9f4] p-3">
                     <Coins className="h-4 w-4 text-[#166534]" />
                     <p className="mt-3 text-xs text-[#667062]">CooperTokens</p>
-                    <p className="mt-1 text-lg font-semibold">saldo util</p>
+                    <p className="mt-1 text-lg font-semibold">saldo do mes</p>
                   </div>
                   <div className="rounded-lg border border-[#dfe5d8] bg-[#f7f9f4] p-3">
-                    <Receipt className="h-4 w-4 text-[#166534]" />
-                    <p className="mt-3 text-xs text-[#667062]">Fatura</p>
-                    <p className="mt-1 text-lg font-semibold">abater valor</p>
+                    <Building2 className="h-4 w-4 text-[#166534]" />
+                    <p className="mt-3 text-xs text-[#667062]">Parceiros</p>
+                    <p className="mt-1 text-lg font-semibold">usar tokens</p>
                   </div>
                 </div>
 
