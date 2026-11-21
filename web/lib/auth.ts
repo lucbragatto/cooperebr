@@ -49,12 +49,19 @@ export async function solicitarCodigoLogin(identificador: string): Promise<Solic
 }
 
 /** Confere o código; se o beneficiário ainda não existe no clube, o backend cria o cadastro. */
-export async function validarCodigoLogin(identificador: string, codigo: string): Promise<void> {
-  const { data } = await api.post<AuthResponse>('/auth/codigo/validar', { identificador, codigo });
+export async function validarCodigoLogin(
+  identificador: string,
+  codigo: string,
+): Promise<{ novoCadastro: boolean; nome: string }> {
+  const { data } = await api.post<AuthResponse & { novoCadastro?: boolean }>('/auth/codigo/validar', {
+    identificador,
+    codigo,
+  });
   Cookies.set(TOKEN_KEY, data.token, COOKIE_OPTS);
   Cookies.set(USUARIO_KEY, JSON.stringify(data.usuario), COOKIE_OPTS);
   localStorage.removeItem('contexto_ativo');
   localStorage.removeItem('contexto_ativo_id');
+  return { novoCadastro: !!data.novoCadastro, nome: data.usuario?.nome ?? '' };
 }
 
 /**
