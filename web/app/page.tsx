@@ -6,287 +6,267 @@ import {
   Check,
   Coins,
   Gift,
-  Leaf,
+  KeyRound,
   LineChart,
   LockKeyhole,
   MessageCircle,
   QrCode,
   Receipt,
-  Sparkles,
+  ShieldCheck,
+  Smartphone,
   Sun,
-  TrendingDown,
   Users,
-  WalletCards,
   Zap,
 } from 'lucide-react';
+import SimuladorTokens from '@/components/clube/SimuladorTokens';
 
 const CLIENTE_URL = 'https://cliente.clube.cooperebr.com.br';
+const ENTRAR_URL = `${CLIENTE_URL}/entrar`;
+const LOGIN_URL = `${CLIENTE_URL}/login`;
 
-const pilares = [
+const passos = [
   {
-    titulo: 'Economia solar',
-    texto: 'Energia compartilhada para reduzir a conta de luz sem obra, sem telhado e sem investimento inicial.',
-    icon: Sun,
-  },
-  {
-    titulo: 'Beneficio do jeito do cliente',
-    texto: 'O membro recebe ate 20% da fatura em CooperTokens para usar nos parceiros. Quem preferir pode optar pelo desconto direto.',
-    icon: WalletCards,
-  },
-  {
-    titulo: 'Rede de parceiros',
-    texto: 'Tokens viram descontos, QR Code e resgates em estabelecimentos e campanhas configuradas pela cooperativa.',
-    icon: QrCode,
-  },
-  {
-    titulo: 'Impacto mensuravel',
-    texto: 'O portal mostra faturas, creditos de energia, historico, beneficios e evolucao do relacionamento.',
-    icon: LineChart,
-  },
-];
-
-const beneficiosCliente = [
-  'Ate 20% da fatura de volta em CooperTokens',
-  'CooperTokens para usar nos parceiros e abater cobrancas',
-  'Pagamento por QR Code em parceiros',
-  'Ofertas e resgates no Clube de Vantagens',
-  'Ranking, niveis e progressao por indicacoes',
-  'Cadastro e acompanhamento pelo WhatsApp',
-];
-
-const jornada = [
-  {
-    titulo: 'Entrar',
-    texto: 'O cliente inicia pelo WhatsApp, informa consumo e recebe orientacao para aderir ao clube.',
+    titulo: 'Entre pelo WhatsApp',
+    texto: 'Informe seu nome e celular. A gente orienta a adesão como cooperado, com ou sem conta de energia.',
     icon: MessageCircle,
   },
   {
-    titulo: 'Economizar',
-    texto: 'A energia solar compartilhada gera creditos que reduzem o custo mensal de energia.',
-    icon: TrendingDown,
+    titulo: 'Receba em tokens',
+    texto: 'Até 20% do valor da sua fatura volta todo mês como CooperTokens no seu saldo.',
+    icon: Coins,
   },
   {
-    titulo: 'Usar beneficios',
-    texto: 'Tokens podem abater faturas, pagar parceiros por QR Code ou liberar ofertas do clube.',
-    icon: Gift,
-  },
-  {
-    titulo: 'Crescer na rede',
-    texto: 'Indicacoes e campanhas alimentam niveis, ranking e recompensas para quem participa mais.',
-    icon: Users,
+    titulo: 'Use nos parceiros',
+    texto: 'Pague por QR Code no comércio parceiro, abata cobranças ou libere ofertas do clube.',
+    icon: QrCode,
   },
 ];
 
-const operacao = [
+const usos = [
+  { titulo: 'Pagar nos parceiros', texto: 'QR Code em estabelecimentos da rede do clube.', icon: QrCode },
+  { titulo: 'Abater cobranças', texto: 'Use o saldo para reduzir valores no portal.', icon: Receipt },
+  { titulo: 'Ofertas do clube', texto: 'Campanhas e resgates liberados por tokens.', icon: Gift },
+  { titulo: 'Indicar e subir de nível', texto: 'Indicações alimentam ranking, níveis e recompensas.', icon: Users },
+];
+
+const portal = [
+  { label: 'Saldo e extrato de tokens', icon: Coins },
+  { label: 'Créditos de energia', icon: Zap },
+  { label: 'Minhas cobranças', icon: Receipt },
+  { label: 'Indicações e ranking', icon: LineChart },
+  { label: 'Segurança com PIN', icon: LockKeyhole },
+];
+
+const empresas = [
   {
-    titulo: 'Planos flexiveis',
-    texto: 'O sistema permite plano gratuito ou pago, individual ou custeado por convenio empresarial.',
+    titulo: 'A empresa vira cooperada',
+    texto: 'Cadastro como cooperado PJ e convênio com a cooperativa, tudo pelo sistema.',
   },
   {
-    titulo: 'Controle financeiro',
-    texto: 'Cobrancas, desconto por token, resgates, PIX e conciliacao ficam registrados no fluxo operacional.',
+    titulo: 'Compra tokens para o time',
+    texto: 'Os tokens viram benefício para funcionários e clientes, distribuídos em lote.',
   },
   {
-    titulo: 'Seguranca por PIN',
-    texto: 'Operacoes sensiveis de token exigem PIN, limites e validacoes para proteger saldo e resgate.',
+    titulo: 'Convite com um link',
+    texto: 'Cada pessoa entra pelo convite da empresa e já cai no clube com o benefício.',
   },
 ];
+
+const perguntas = [
+  {
+    p: 'Preciso fazer obra ou instalar placas?',
+    r: 'Não. A energia é solar compartilhada: não precisa de telhado, obra nem investimento inicial.',
+  },
+  {
+    p: 'Quem pode participar do clube?',
+    r: 'Quem se cadastra como cooperado da COOPERE-BR, com ou sem conta de energia. Sem conta, você participa por meio de empresas e convênios que distribuem tokens.',
+  },
+  {
+    p: 'Já sou cliente da COOPERE-BR. Preciso de outro cadastro?',
+    r: 'Não. Entre com o mesmo celular ou e-mail do app COOPERE-BR. Você recebe um código e seu cadastro do clube é criado na hora.',
+  },
+  {
+    p: 'Prefiro desconto direto na fatura. Ainda existe?',
+    r: 'Sim. O clube destaca os tokens, mas quem preferir pode optar pelo desconto direto.',
+  },
+];
+
+function Anel({ className = '' }: { className?: string }) {
+  return (
+    <div className={`relative aspect-square shrink-0 ${className}`} aria-hidden="true">
+      <div
+        className="absolute inset-0 rounded-full"
+        style={{ background: 'conic-gradient(#d7ff65 0deg 72deg, rgba(255,255,255,0.10) 72deg 360deg)' }}
+      />
+      <div className="absolute inset-[8%] flex flex-col items-center justify-center rounded-full bg-[#101510] text-white">
+        <Sun className="h-5 w-5 text-[#d7ff65]" />
+        <span className="mt-0.5 text-2xl font-bold">até 20%</span>
+        <span className="text-[11px] text-[#a9b3a4]">da fatura em tokens</span>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   return (
     <main className="min-h-screen bg-[#f5f7f2] text-[#101510]">
+      {/* Hero */}
       <section className="relative overflow-hidden bg-[#101510] text-white">
         <div
-          className="absolute inset-0 opacity-62"
+          className="absolute inset-0 opacity-45"
           style={{
             backgroundImage:
-              "linear-gradient(118deg, rgba(16,21,16,0.98) 0%, rgba(16,21,16,0.86) 46%, rgba(16,21,16,0.24) 100%), url('https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=2400&q=86')",
+              "linear-gradient(115deg, rgba(16,21,16,1) 0%, rgba(16,21,16,0.9) 50%, rgba(16,21,16,0.55) 100%), url('https://images.unsplash.com/photo-1509391366360-2e959784a276?auto=format&fit=crop&w=2400&q=80')",
             backgroundPosition: 'center',
             backgroundSize: 'cover',
           }}
+          aria-hidden="true"
         />
 
-        <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
-          <Link href="/" className="flex items-center gap-3" aria-label="Clube COOPERE-BR">
-            <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-white/20 bg-white">
+        <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between gap-4 px-5 py-5 sm:px-8">
+          <Link href="/" className="flex items-center gap-3" aria-label="Clube COOPERE-BR, início">
+            <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-white">
               <Image
                 src="/brand/logo-cooperebr.jpg"
-                alt="Logo COOPERE-BR"
+                alt=""
                 width={44}
                 height={44}
                 priority
                 className="h-full w-full object-cover"
               />
             </span>
-            <span>
-              <span className="block text-sm font-semibold uppercase tracking-[0.18em] text-white/64">
+            <span className="leading-tight">
+              <span className="block text-[11px] font-semibold uppercase tracking-[0.16em] text-[#a9b3a4]">
                 COOPERE-BR
               </span>
               <span className="block text-base font-semibold">Clube Solar</span>
             </span>
           </Link>
 
-          <nav className="hidden items-center gap-8 text-sm text-white/72 md:flex">
-            <a href="#beneficios" className="transition hover:text-white">
-              Beneficios
-            </a>
-            <a href="#tokens" className="transition hover:text-white">
-              CooperTokens
-            </a>
-            <a href="#empresas" className="transition hover:text-white">
-              Empresas
-            </a>
+          <nav className="hidden items-center gap-8 text-sm text-white/75 md:flex" aria-label="Seções">
+            <a href="#como-funciona" className="hover:text-white">Como funciona</a>
+            <a href="#onde-usar" className="hover:text-white">Onde usar</a>
+            <a href="#empresas" className="hover:text-white">Empresas</a>
+            <a href="#duvidas" className="hover:text-white">Dúvidas</a>
           </nav>
 
           <Link
-            href={`${CLIENTE_URL}/login`}
-            className="inline-flex h-10 items-center justify-center rounded-full border border-white/28 px-5 text-sm font-medium text-white transition hover:bg-white hover:text-[#111814]"
+            href={LOGIN_URL}
+            className="inline-flex h-11 items-center justify-center rounded-full border border-white/30 px-5 text-sm font-semibold transition hover:bg-white hover:text-[#101510]"
           >
-            Acessar
+            Entrar
           </Link>
         </header>
 
-        <div className="relative z-10 mx-auto grid min-h-[calc(100vh-88px)] w-full max-w-7xl grid-cols-1 items-center gap-12 px-5 pb-16 pt-8 sm:px-8 lg:grid-cols-[1.02fr_0.98fr]">
-          <div className="max-w-3xl">
-            <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-white/18 bg-white/8 px-4 py-2 text-sm text-white/78 backdrop-blur">
-              <Sparkles className="h-4 w-4 text-[#d7ff65]" />
-              Energia limpa, economia e beneficios em uma unica assinatura
+        <div className="relative z-10 mx-auto grid w-full max-w-7xl items-center gap-10 px-5 pb-16 pt-6 sm:px-8 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14 lg:pb-24 lg:pt-12">
+          <div className="min-w-0">
+            <p className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm text-white/85">
+              <ShieldCheck className="h-4 w-4 text-[#d7ff65]" aria-hidden="true" />
+              Mesmo acesso do app COOPERE-BR · sem senha
             </p>
-
-            <h1 className="max-w-4xl text-5xl font-semibold leading-[1.02] tracking-normal text-white sm:text-6xl lg:text-7xl">
-              Um clube solar que devolve valor todo mes.
+            <h1 className="mt-6 text-[40px] font-semibold leading-[1.02] sm:text-6xl lg:text-7xl">
+              Sua energia virou benefício.
             </h1>
-
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-white/74 sm:text-xl">
-              O cliente recebe ate 20% da fatura em CooperTokens para usar nos parceiros do clube,
-              acompanha tudo pelo portal e ainda ganha com ofertas e indicacoes.
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-[#c4ccbf] sm:text-xl">
+              Até 20% da sua fatura de energia volta todo mês em CooperTokens para usar nos parceiros do
+              clube. Energia solar compartilhada, sem obra e sem investimento.
             </p>
 
-            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
-                href={`${CLIENTE_URL}/entrar`}
-                className="inline-flex h-12 items-center justify-center rounded-full bg-[#d7ff65] px-7 text-sm font-semibold text-[#102012] transition hover:bg-white"
+                href={ENTRAR_URL}
+                className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[#d7ff65] px-8 text-base font-semibold text-[#102012] transition hover:bg-white"
               >
                 Quero participar
-                <ArrowRight className="ml-2 h-4 w-4" />
+                <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
-                href={`${CLIENTE_URL}/login`}
-                className="inline-flex h-12 items-center justify-center rounded-full border border-white/24 px-7 text-sm font-semibold text-white transition hover:bg-white hover:text-[#111814]"
+                href={LOGIN_URL}
+                className="inline-flex h-14 items-center justify-center rounded-full border border-white/30 px-8 text-base font-semibold transition hover:bg-white hover:text-[#101510]"
               >
-                Ja sou cliente
+                Já sou cooperado
               </Link>
             </div>
 
-            <div className="mt-10 grid max-w-2xl grid-cols-3 divide-x divide-white/16 border-y border-white/16 py-5">
-              <div className="pr-4">
-                <strong className="block text-2xl font-semibold">0</strong>
-                <span className="mt-1 block text-xs leading-5 text-white/58">obra no imovel</span>
-              </div>
-              <div className="px-4">
-                <strong className="block text-2xl font-semibold">2</strong>
-                <span className="mt-1 block text-xs leading-5 text-white/58">formas de beneficio</span>
-              </div>
-              <div className="pl-4">
-                <strong className="block text-2xl font-semibold">24h</strong>
-                <span className="mt-1 block text-xs leading-5 text-white/58">portal e historico</span>
-              </div>
-            </div>
+            <ul className="mt-10 grid max-w-xl grid-cols-1 gap-2.5 text-sm sm:grid-cols-3">
+              {[
+                { icon: Sun, t: 'Sem obra no imóvel' },
+                { icon: Coins, t: 'Tokens todo mês' },
+                { icon: Smartphone, t: 'Tudo pelo celular' },
+              ].map(({ icon: Icon, t }) => (
+                <li key={t} className="flex items-center gap-2.5 rounded-2xl border border-white/15 px-4 py-3">
+                  <Icon className="h-5 w-5 shrink-0 text-[#d7ff65]" aria-hidden="true" />
+                  {t}
+                </li>
+              ))}
+            </ul>
           </div>
 
           <div className="mx-auto w-full max-w-md lg:ml-auto">
-            <div className="overflow-hidden rounded-lg border border-white/18 bg-white text-[#101510] shadow-2xl">
-              <div className="border-b border-[#dfe5d8] bg-[#f7f9f4] p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#667062]">
-                      Meu Clube
-                    </p>
-                    <h2 className="mt-1 text-xl font-semibold">Resumo do mes</h2>
-                  </div>
-                  <span className="grid h-11 w-11 place-items-center rounded-full bg-[#101510] text-[#d7ff65]">
-                    <Leaf className="h-5 w-5" />
+            <SimuladorTokens entrarUrl={ENTRAR_URL} />
+          </div>
+        </div>
+      </section>
+
+      {/* Como funciona */}
+      <section id="como-funciona" className="mx-auto max-w-7xl px-5 py-20 sm:px-8">
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div className="max-w-2xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#5b6c50]">Como funciona</p>
+            <h2 className="mt-3 text-4xl font-semibold leading-tight sm:text-5xl">
+              Três passos e sua conta de luz começa a render.
+            </h2>
+          </div>
+          <Anel className="hidden w-36 sm:block" />
+        </div>
+
+        <ol className="mt-10 grid gap-3 md:grid-cols-3">
+          {passos.map((p, i) => {
+            const Icon = p.icon;
+            return (
+              <li key={p.titulo} className="rounded-3xl border border-[#dce2d4] bg-white p-6 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#101510]">
+                    <Icon className="h-5 w-5 text-[#d7ff65]" aria-hidden="true" />
+                  </span>
+                  <span className="text-5xl font-semibold text-[#dfe5d8]" aria-hidden="true">
+                    {i + 1}
                   </span>
                 </div>
-              </div>
-
-              <div className="space-y-3 p-4">
-                <div className="rounded-lg bg-[#101510] p-4 text-white">
-                  <p className="text-sm text-white/62">Retorno da sua fatura em CooperTokens</p>
-                  <div className="mt-3 flex items-end justify-between gap-4">
-                    <p className="text-4xl font-semibold">
-                      ate 20%
-                      <span className="ml-2 text-base font-medium text-white/62">da fatura</span>
-                    </p>
-                    <span className="rounded-full bg-[#d7ff65] px-3 py-1 text-xs font-semibold text-[#102012]">
-                      em tokens
-                    </span>
-                  </div>
-                  <p className="mt-3 text-xs leading-5 text-white/58">
-                    Para usar nos parceiros do clube.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg border border-[#dfe5d8] bg-[#f7f9f4] p-3">
-                    <Coins className="h-4 w-4 text-[#166534]" />
-                    <p className="mt-3 text-xs text-[#667062]">CooperTokens</p>
-                    <p className="mt-1 text-lg font-semibold">saldo do mes</p>
-                  </div>
-                  <div className="rounded-lg border border-[#dfe5d8] bg-[#f7f9f4] p-3">
-                    <Building2 className="h-4 w-4 text-[#166534]" />
-                    <p className="mt-3 text-xs text-[#667062]">Parceiros</p>
-                    <p className="mt-1 text-lg font-semibold">usar tokens</p>
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-[#dfe5d8] p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">Proximo beneficio</p>
-                      <p className="mt-1 text-sm text-[#667062]">Oferta local liberada por tokens</p>
-                    </div>
-                    <Gift className="h-5 w-5 text-[#166534]" />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-center text-xs text-[#667062]">
-                  <span className="rounded-md bg-[#eef4e7] px-2 py-2">PIN</span>
-                  <span className="rounded-md bg-[#eef4e7] px-2 py-2">QR Code</span>
-                  <span className="rounded-md bg-[#eef4e7] px-2 py-2">Ranking</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+                <h3 className="mt-6 text-xl font-semibold">{p.titulo}</h3>
+                <p className="mt-2 text-[15px] leading-relaxed text-[#4b5546]">{p.texto}</p>
+              </li>
+            );
+          })}
+        </ol>
       </section>
 
-      <section id="beneficios" className="mx-auto max-w-7xl px-5 py-20 sm:px-8">
-        <div className="grid gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#5b6c50]">
-              Beneficio real
-            </p>
-            <h2 className="mt-4 text-4xl font-semibold leading-tight text-[#101510] sm:text-5xl">
-              Sustentavel porque reduz desperdicio. Inovador porque transforma economia em uso.
+      {/* Onde usar */}
+      <section id="onde-usar" className="bg-white py-20">
+        <div className="mx-auto max-w-7xl px-5 sm:px-8">
+          <div className="max-w-2xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#5b6c50]">CooperToken</p>
+            <h2 className="mt-3 text-4xl font-semibold leading-tight sm:text-5xl">
+              O benefício aparece, acumula e vira uso.
             </h2>
-            <p className="mt-5 text-base leading-8 text-[#667062]">
-              A proposta do clube e simples: o cliente participa de energia solar compartilhada,
-              recebe vantagem financeira e passa a ter uma moeda de relacionamento para circular
-              dentro de uma rede local.
+            <p className="mt-4 text-base leading-relaxed text-[#4b5546]">
+              Seus tokens circulam numa rede local de parceiros. Operações sensíveis são protegidas por PIN.
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            {pilares.map((pilar) => {
-              const Icon = pilar.icon;
+          <div className="mt-10 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {usos.map((u) => {
+              const Icon = u.icon;
               return (
-                <article key={pilar.titulo} className="rounded-lg border border-[#dce2d4] bg-white p-5 shadow-sm">
-                  <div className="grid h-10 w-10 place-items-center rounded-md bg-[#eef8df] text-[#166534]">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <h3 className="mt-5 text-lg font-semibold">{pilar.titulo}</h3>
-                  <p className="mt-2 text-sm leading-6 text-[#667062]">{pilar.texto}</p>
+                <article
+                  key={u.titulo}
+                  className="group rounded-3xl border border-[#dce2d4] bg-[#f5f7f2] p-6 transition hover:-translate-y-1 hover:border-[#101510] hover:bg-white"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#d7ff65]">
+                    <Icon className="h-5 w-5 text-[#102012]" aria-hidden="true" />
+                  </span>
+                  <h3 className="mt-5 text-lg font-semibold">{u.titulo}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[#4b5546]">{u.texto}</p>
                 </article>
               );
             })}
@@ -294,140 +274,153 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="tokens" className="bg-white py-20">
-        <div className="mx-auto grid max-w-7xl gap-12 px-5 sm:px-8 lg:grid-cols-[1fr_1fr]">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#5b6c50]">
-              CooperToken
-            </p>
-            <h2 className="mt-4 text-4xl font-semibold leading-tight text-[#101510] sm:text-5xl">
-              O beneficio nao fica escondido. Ele aparece, acumula e pode ser usado.
-            </h2>
-            <p className="mt-5 text-base leading-8 text-[#667062]">
-              O sistema ja permite saldo, extrato, abatimento de fatura, QR Code em parceiro,
-              ofertas do Clube de Vantagens, resgate e operacoes protegidas por PIN.
-            </p>
-
-            <div className="mt-8 grid gap-2">
-              {beneficiosCliente.map((item) => (
-                <div key={item} className="flex items-center gap-3 border-t border-[#dce2d4] py-3">
-                  <Check className="h-4 w-4 shrink-0 text-[#166534]" />
-                  <p className="text-sm font-medium text-[#253126]">{item}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-3">
-            {jornada.map((item, index) => {
-              const Icon = item.icon;
-              return (
-                <article key={item.titulo} className="grid grid-cols-[auto_1fr] gap-4 rounded-lg border border-[#dce2d4] bg-[#f7f9f4] p-5">
-                  <div className="grid h-11 w-11 place-items-center rounded-md bg-[#101510] text-[#d7ff65]">
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a9385]">
-                      passo {index + 1}
-                    </p>
-                    <h3 className="mt-1 text-lg font-semibold">{item.titulo}</h3>
-                    <p className="mt-2 text-sm leading-6 text-[#667062]">{item.texto}</p>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
+      {/* Portal */}
       <section className="mx-auto max-w-7xl px-5 py-20 sm:px-8">
-        <div className="overflow-hidden rounded-lg bg-[#101510] text-white">
-          <div className="grid gap-10 p-6 sm:p-8 lg:grid-cols-[0.9fr_1.1fr] lg:p-10">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#d7ff65]">
-                Portal do membro
-              </p>
-              <h2 className="mt-4 text-4xl font-semibold leading-tight sm:text-5xl">
-                Tudo que importa fica visivel no celular.
-              </h2>
-              <p className="mt-5 text-base leading-8 text-white/68">
-                Financeiro, creditos de energia, CooperTokens, faturas, indicacoes, seguranca e
-                documentos ficam em uma experiencia direta para consulta recorrente.
-              </p>
-            </div>
+        <div className="grid items-center gap-10 overflow-hidden rounded-[32px] bg-[#101510] p-6 text-white sm:p-10 lg:grid-cols-[1fr_auto] lg:p-14">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#d7ff65]">Portal do cooperado</p>
+            <h2 className="mt-3 text-4xl font-semibold leading-tight sm:text-5xl">Tudo visível no seu celular.</h2>
+            <p className="mt-4 max-w-xl text-base leading-relaxed text-[#c4ccbf]">
+              Entre com o celular, receba um código e acompanhe seu saldo, sua energia e suas indicações.
+            </p>
+            <ul className="mt-8 grid gap-2.5 sm:grid-cols-2">
+              {portal.map(({ label, icon: Icon }) => (
+                <li key={label} className="flex items-center gap-3 rounded-2xl border border-white/15 px-4 py-3.5 text-sm">
+                  <Icon className="h-5 w-5 shrink-0 text-[#d7ff65]" aria-hidden="true" />
+                  {label}
+                </li>
+              ))}
+            </ul>
+            <Link
+              href={LOGIN_URL}
+              className="mt-8 inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[#d7ff65] px-8 text-base font-semibold text-[#102012] transition hover:bg-white"
+            >
+              <KeyRound className="h-4 w-4" />
+              Entrar com código
+            </Link>
+          </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              {[
-                { label: 'Creditos de energia', icon: Zap },
-                { label: 'Minhas cobrancas', icon: Receipt },
-                { label: 'Clube de vantagens', icon: Gift },
-                { label: 'Seguranca e PIN', icon: LockKeyhole },
-              ].map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div key={item.label} className="rounded-lg border border-white/14 bg-white/8 p-4">
-                    <Icon className="h-5 w-5 text-[#d7ff65]" />
-                    <p className="mt-4 text-sm font-semibold text-white/88">{item.label}</p>
-                  </div>
-                );
-              })}
+          {/* Mock do celular */}
+          <div className="mx-auto w-full max-w-[300px] rounded-[40px] border-[10px] border-[#262c25] bg-[#f5f7f2] p-4 text-[#101510]" aria-hidden="true">
+            <div className="mx-auto mb-4 h-1.5 w-16 rounded-full bg-[#cfd6c8]" />
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#5b6656]">Meu clube</p>
+            <div className="mt-3 rounded-2xl bg-[#101510] p-4 text-white">
+              <p className="text-xs text-[#a9b3a4]">Saldo de CooperTokens</p>
+              <p className="mt-1 text-3xl font-semibold tracking-widest">••••</p>
+              <div className="mt-3 h-1.5 rounded-full bg-white/15">
+                <div className="h-1.5 w-3/5 rounded-full bg-[#d7ff65]" />
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-2xl bg-white p-3">
+                <QrCode className="h-4 w-4 text-[#166534]" />
+                <p className="mt-2 text-xs font-semibold">Pagar parceiro</p>
+              </div>
+              <div className="rounded-2xl bg-white p-3">
+                <Receipt className="h-4 w-4 text-[#166534]" />
+                <p className="mt-2 text-xs font-semibold">Abater cobrança</p>
+              </div>
+            </div>
+            <div className="mt-2 flex items-center justify-between rounded-2xl bg-white p-3">
+              <span className="text-xs font-semibold">Próximo benefício</span>
+              <Gift className="h-4 w-4 text-[#166534]" />
             </div>
           </div>
         </div>
       </section>
 
+      {/* Empresas */}
       <section id="empresas" className="bg-[#eef2e8] py-20">
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
-          <div className="mb-10 max-w-3xl">
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#5b6c50]">
-              Para empresas e convenios
-            </p>
-            <h2 className="mt-4 text-4xl font-semibold leading-tight text-[#101510] sm:text-5xl">
-              Um beneficio corporativo com energia, comunidade e controle.
+          <div className="max-w-3xl">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#5b6c50]">Para empresas e convênios</p>
+            <h2 className="mt-3 text-4xl font-semibold leading-tight sm:text-5xl">
+              Benefício para o seu time, mesmo sem conta de energia.
             </h2>
-            <p className="mt-5 text-base leading-8 text-[#667062]">
-              O clube tambem funciona como vantagem para colaboradores, condominios, empresas e
-              redes parceiras, com custeio por convenio e distribuicao de tokens.
+            <p className="mt-4 text-base leading-relaxed text-[#4b5546]">
+              Empresas, condomínios e redes compram tokens e distribuem para funcionários e clientes, que
+              entram no clube como cooperados.
             </p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            {operacao.map((item) => (
-              <article key={item.titulo} className="rounded-lg border border-[#d7ded0] bg-white p-6 shadow-sm">
-                <Building2 className="h-5 w-5 text-[#166534]" />
-                <h3 className="mt-5 text-lg font-semibold">{item.titulo}</h3>
-                <p className="mt-3 text-sm leading-6 text-[#667062]">{item.texto}</p>
-              </article>
+          <ol className="mt-10 grid gap-3 md:grid-cols-3">
+            {empresas.map((e, i) => (
+              <li key={e.titulo} className="rounded-3xl border border-[#d7ded0] bg-white p-6 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#101510]">
+                    <Building2 className="h-5 w-5 text-[#d7ff65]" aria-hidden="true" />
+                  </span>
+                  <span className="text-sm font-semibold text-[#5b6656]">Etapa {i + 1}</span>
+                </div>
+                <h3 className="mt-5 text-lg font-semibold">{e.titulo}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-[#4b5546]">{e.texto}</p>
+              </li>
             ))}
-          </div>
+          </ol>
+
+          <Link
+            href={ENTRAR_URL}
+            className="mt-8 inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[#101510] px-8 text-base font-semibold text-white transition hover:bg-black"
+          >
+            Quero levar para minha empresa
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
       </section>
 
+      {/* Dúvidas */}
+      <section id="duvidas" className="mx-auto max-w-3xl px-5 py-20 sm:px-8">
+        <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#5b6c50]">Dúvidas</p>
+        <h2 className="mt-3 text-4xl font-semibold leading-tight">Perguntas frequentes</h2>
+        <div className="mt-8 divide-y divide-[#dce2d4] border-y border-[#dce2d4]">
+          {perguntas.map((q) => (
+            <details key={q.p} className="group py-5">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 text-lg font-semibold">
+                {q.p}
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-[#dce2d4] text-xl leading-none transition group-open:rotate-45" aria-hidden="true">
+                  +
+                </span>
+              </summary>
+              <p className="mt-3 text-[15px] leading-relaxed text-[#4b5546]">{q.r}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA final */}
       <section className="bg-[#101510] px-5 py-16 text-white sm:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-8 md:flex-row md:items-center">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#d7ff65]">
-              Clube COOPERE-BR
-            </p>
-            <h2 className="mt-3 max-w-2xl text-3xl font-semibold leading-tight sm:text-4xl">
-              Energia limpa como porta de entrada para uma rede de beneficios.
-            </h2>
+        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-8 md:flex-row md:items-center">
+          <div className="flex items-center gap-6">
+            <Anel className="hidden w-28 sm:block" />
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-[#d7ff65]">Clube COOPERE-BR</p>
+              <h2 className="mt-2 max-w-xl text-3xl font-semibold leading-tight sm:text-4xl">
+                Energia limpa como porta de entrada para uma rede de benefícios.
+              </h2>
+            </div>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
             <Link
-              href={`${CLIENTE_URL}/entrar`}
-              className="inline-flex h-12 items-center justify-center rounded-full bg-[#d7ff65] px-7 text-sm font-semibold text-[#102012] transition hover:bg-white"
+              href={ENTRAR_URL}
+              className="inline-flex h-14 items-center justify-center gap-2 rounded-full bg-[#d7ff65] px-8 text-base font-semibold text-[#102012] transition hover:bg-white"
             >
-              Comecar cadastro
-              <ArrowRight className="ml-2 h-4 w-4" />
+              Começar cadastro
+              <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
-              href={`${CLIENTE_URL}/login`}
-              className="inline-flex h-12 items-center justify-center rounded-full border border-white/24 px-7 text-sm font-semibold text-white transition hover:bg-white hover:text-[#111814]"
+              href={LOGIN_URL}
+              className="inline-flex h-14 items-center justify-center rounded-full border border-white/30 px-8 text-base font-semibold transition hover:bg-white hover:text-[#101510]"
             >
-              Acessar sistema
+              Entrar
             </Link>
           </div>
+        </div>
+        <div className="mx-auto mt-12 flex max-w-7xl flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-6 text-xs text-[#a9b3a4]">
+          <span>© COOPERE-BR · Clube Solar</span>
+          <span className="flex items-center gap-1.5">
+            <Check className="h-3.5 w-3.5 text-[#d7ff65]" aria-hidden="true" />
+            Acesso com código por SMS ou e-mail
+          </span>
         </div>
       </section>
     </main>

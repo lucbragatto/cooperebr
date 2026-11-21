@@ -72,6 +72,58 @@ const CODIGOS_SEM_CADASTRO = ['NAO_BENEFICIARIO_COOPEREBR', 'NAO_TITULAR'];
 
 const REENVIO_SEGUNDOS = 60;
 
+// Provedores de e-mail mais usados no Brasil (ordem = prioridade da sugestão)
+const DOMINIOS_EMAIL = [
+  'gmail.com',
+  'hotmail.com',
+  'outlook.com',
+  'yahoo.com.br',
+  'icloud.com',
+  'live.com',
+  'uol.com.br',
+  'bol.com.br',
+  'terra.com.br',
+  'yahoo.com',
+  'outlook.com.br',
+  'hotmail.com.br',
+];
+
+/** "(27) 99999-9999" (celular) ou "(27) 3333-4444" (fixo), formatando enquanto digita. */
+function formatarTelefone(digitos: string): string {
+  const d = digitos.slice(0, 11);
+  if (d.length === 0) return '';
+  if (d.length <= 2) return `(${d}`;
+  const ddd = d.slice(0, 2);
+  const resto = d.slice(2);
+  if (resto.length <= 4) return `(${ddd}) ${resto}`;
+  if (d.length <= 10) return `(${ddd}) ${resto.slice(0, 4)}-${resto.slice(4)}`;
+  return `(${ddd}) ${resto.slice(0, 5)}-${resto.slice(5)}`;
+}
+
+/** Celular (só números) ganha máscara; com letra ou "@" vira e-mail (sem máscara, minúsculo). */
+function normalizarIdentificador(valor: string): string {
+  const temLetraOuArroba = /[a-zA-Z@]/.test(valor);
+  if (!temLetraOuArroba) {
+    let d = valor.replace(/\D/g, '');
+    if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
+    return formatarTelefone(d);
+  }
+  // Se começou como telefone mascarado, tira a máscara antes de seguir como e-mail
+  const semMascara = valor.startsWith('(') ? valor.replace(/[()\s-]/g, '') : valor;
+  return semMascara.replace(/\s/g, '').toLowerCase();
+}
+
+function sugestoesEmail(valor: string): string[] {
+  const arroba = valor.indexOf('@');
+  if (arroba < 1) return [];
+  const local = valor.slice(0, arroba);
+  const dominio = valor.slice(arroba + 1);
+  if (dominio.includes('@')) return [];
+  return DOMINIOS_EMAIL.filter((d) => d.startsWith(dominio) && d !== dominio)
+    .slice(0, 5)
+    .map((d) => `${local}@${d}`);
+}
+
 function mensagemErro(e: unknown, padrao: string): string {
   const msg = (e as { response?: { data?: { message?: unknown } } })?.response?.data?.message;
   if (typeof msg === 'string' && msg.trim()) return msg;
@@ -207,6 +259,18 @@ export default function LoginPage() {
   }
 
   const passo = etapa === 'codigo' || etapa === 'escolha' ? 2 : etapa === 'boasvindas' ? 3 : 1;
+  const sugestoes = sugestoesEmail(identificador);
+  const modoTelefone = identificador !== '' && !/[a-zA-Z@]/.test(identificador);
+
+  function teclaIdentificador(e: React.KeyboardEvent<HTMLInputElement>) {
+    // Tab ou → completa com a primeira sugestão de e-mail
+    if (sugestoes.length && (e.key === 'Tab' || e.key === 'ArrowRight')) {
+      const alvo = e.currentTarget;
+      if (e.key === 'ArrowRight' && alvo.selectionStart !== identificador.length) return;
+      e.preventDefault();
+      setIdentificador(sugestoes[0]);
+    }
+  }
   const destino = envio?.telefoneMascarado || envio?.emailMascarado || 'seu contato cadastrado';
 
   return (
@@ -313,13 +377,41 @@ export default function LoginPage() {
                     type="text"
                     inputMode="email"
                     autoComplete="username"
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     placeholder="(27) 99999-9999 ou e-mail"
                     value={identificador}
-                    onChange={(e) => setIdentificador(e.target.value)}
+                    onChange={(e) => setIdentificador(normalizarIdentificador(e.target.value))}
+                    onKeyDown={teclaIdentificador}
+                    aria-describedby="ident-dica"
                     required
                     autoFocus
                     className={campoClasse}
                   />
+                  {sugestoes.length > 0 ? (
+                    <ul id="ident-dica" className="flex flex-wrap gap-2 pt-1" aria-label="Sugestões de e-mail">
+                      {sugestoes.map((s, i) => (
+                        <li key={s}>
+                          <button
+                            type="button"
+                            onClick={() => setIdentificador(s)}
+                            className={`min-h-9 rounded-full border px-3 text-[13px] transition ${
+                              i === 0
+                                ? 'border-[#101510] bg-[#101510] text-white'
+                                : 'border-[#dfe5d8] bg-[#f5f7f2] text-[#3d4639] hover:border-[#101510]'
+                            }`}
+                          >
+                            @{s.split('@')[1]}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p id="ident-dica" className="pt-1 text-xs text-[#5b6656]">
+                      {modoTelefone ? 'Celular com DDD' : 'Digite o celular com DDD ou o e-mail'}
+                    </p>
+                  )}
                 </div>
                 {erro && <p className="text-sm text-red-700">{erro}</p>}
                 <button
