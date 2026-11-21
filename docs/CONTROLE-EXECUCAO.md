@@ -75,6 +75,29 @@
 
 ---
 
+## ONDE PARAMOS — 2026-11-21 (Code, Leonardo — Clube: login unificado com a CoopereBR + redesign mobile-first, branch `deploy/clube-cooperebr`)
+
+**Última sessão (19–21/11):**
+- **Tokens:** o clube passou a mostrar "até 20% da fatura em CooperTokens para usar nos parceiros", com o desconto direto como alternativa.
+- **Login por código:** o cooperado entra com o mesmo celular ou e-mail do app CoopereBR, usando a Function `func-cadastro-benef` com uma chave própria (`tbl_api_keys` id 11, escopo Login). Se não tiver cadastro no clube, Usuario + Cooperado são criados no primeiro acesso.
+- **Bug corrigido:** um telefone *autorizado* na conta de outra pessoa abria a sessão dela. Agora só o **titular** entra; quem tem CPF + CNPJ escolhe a conta.
+- **Visual novo:** página inicial com simulador, `/login`, `/entrar` e portal do cooperado, todos responsivos.
+- **Commits:** `613cb92` `0b81c46` `4721e54` `01d83ee` `3c557ab` `66a97b9` `249b261` + redirect `/portal/login`.
+- **Detalhes:** `docs/sessoes/2026-11-21-clube-login-unificado-e-redesign.md`.
+
+**Abertos:**
+- **P0:** senha única `DEV_AUTH_PASSWORD` ativa na VM (`AMBIENTE_REAL=false`), com o quadro de credenciais visível.
+- Fase 2 da Function (`vinculo: PROPRIO | AUTORIZADO`).
+- Contas autorizadas só para consulta.
+- Telas internas do portal no visual antigo.
+- Cadastro do Luciano criado no teste: decidir se apaga.
+
+**FRASE DE RETOMADA (copiar para o Code):**
+> PASSO 0: ler `docs/sessoes/2026-11-21-clube-login-unificado-e-redesign.md`, `git log -10 --oneline` na branch `deploy/clube-cooperebr` e conferir se a VM `vm-clube-cooperebr` está ligada (`az vm get-instance-view -g RG-CLUBE-COOPEREBR -n vm-clube-cooperebr`).
+> PASSO 1: resolver D-novo-SENHA-UNICA-VM (P0). Criar senhas próprias para quem é da equipe, depois tirar `DEV_AUTH_PASSWORD` do login da VM e esconder o quadro de credenciais de teste do `/login`.
+
+---
+
 ## ONDE PARAMOS — 2026-07-14 (Code — FIX texto convite na main + Sprint Máscara de e-mail preservada em branch, aguardando Bloco F + re-review)
 
 **Sessão entregou 2 blocos independentes** em 1 commit na main + 1 SHA preservado em branch dedicada.
