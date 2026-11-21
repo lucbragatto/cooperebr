@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -13,9 +13,23 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Clube COOPERE-BR | Energia solar e beneficios",
+  title: "Clube COOPERE-BR | Energia solar e benefícios",
   description:
-    "Clube de energia solar compartilhada, assinatura, beneficios e Cooper Tokens.",
+    "Até 20% da sua fatura de energia em CooperTokens para usar nos parceiros do clube.",
+  // iPhone: "Adicionar à Tela de Início" abre como app, com barra escura
+  appleWebApp: {
+    capable: true,
+    title: "Clube Solar",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+// viewport-fit=cover libera env(safe-area-inset-*) (notch e barra inferior do iPhone)
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#101510",
 };
 
 export default function RootLayout({
@@ -24,7 +38,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="pt-BR">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

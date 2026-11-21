@@ -1,25 +1,34 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import {
+  ArrowRight,
+  Award,
+  BarChart3,
+  Calendar,
+  Check,
+  CheckCircle2,
+  Coins,
+  Copy,
+  DollarSign,
+  FileText,
+  FileWarning,
+  Gift,
+  Handshake,
+  MessageCircle,
+  PenTool,
+  QrCode,
+  Receipt,
+  Search,
+  ShoppingBag,
+  Store,
+  Users,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react';
 import { getUsuario } from '@/lib/auth';
 import api from '@/lib/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Percent,
-  Calendar,
-  Zap,
-  AlertTriangle,
-  FileWarning,
-  DollarSign,
-  MessageCircle,
-  CheckCircle,
-  Clock,
-  FileText,
-  Search,
-  PenTool,
-  Store,
-} from 'lucide-react';
-import Link from 'next/link';
 
 interface Resumo {
   descontoAtual: number | null;
@@ -35,14 +44,13 @@ interface MeuPerfil {
   nomeCompleto: string;
   codigoIndicacao?: string;
   resumo: Resumo;
-  // Sprint Higiene Bloco B (14/06/2026 — D2): flag que habilita acesso
-  // ao "Balcão do Clube" (/estabelecimento). Vem de Cooperado.ehEstabelecimento.
+  // Sprint Higiene Bloco B (14/06/2026 — D2): habilita o "Balcão do Clube" (/estabelecimento).
   ehEstabelecimento?: boolean;
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  PENDENTE: 'Pendente',
-  PENDENTE_VALIDACAO: 'Pendente validação',
+  PENDENTE: 'Cadastro pendente',
+  PENDENTE_VALIDACAO: 'Em validação',
   PENDENTE_DOCUMENTOS: 'Aguardando documentos',
   APROVADO: 'Aprovado',
   ATIVO: 'Ativo',
@@ -51,285 +59,332 @@ const STATUS_LABEL: Record<string, string> = {
   ENCERRADO: 'Encerrado',
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  PENDENTE: 'text-yellow-600',
-  PENDENTE_VALIDACAO: 'text-yellow-600',
-  PENDENTE_DOCUMENTOS: 'text-amber-600',
-  APROVADO: 'text-blue-600',
-  ATIVO: 'text-green-700',
-  ATIVO_RECEBENDO_CREDITOS: 'text-green-700',
-  SUSPENSO: 'text-red-600',
-  ENCERRADO: 'text-gray-500',
-};
+const STATUS_ATIVOS = ['ATIVO', 'ATIVO_RECEBENDO_CREDITOS'];
+
+const acoesCarteira: { href: string; label: string; icon: LucideIcon }[] = [
+  { href: '/portal/tokens', label: 'Pagar', icon: QrCode },
+  { href: '/portal/tokens', label: 'Usar na fatura', icon: Receipt },
+  { href: '/portal/resgatar-tokens', label: 'Resgatar', icon: Gift },
+  { href: '/portal/comprar-tokens', label: 'Comprar', icon: ShoppingBag },
+];
+
+const atalhos: { href: string; label: string; desc: string; icon: LucideIcon }[] = [
+  { href: '/portal/clube', label: 'Clube de Vantagens', desc: 'Ofertas e resgates', icon: Award },
+  { href: '/portal/financeiro', label: 'Financeiro', desc: 'Cobranças e faturas', icon: DollarSign },
+  { href: '/portal/ucs', label: 'Minhas UCs', desc: 'Unidades e energia', icon: Zap },
+  { href: '/portal/creditos', label: 'Créditos', desc: 'Energia compensada', icon: BarChart3 },
+  { href: '/portal/documentos', label: 'Documentos', desc: 'Envios e contrato', icon: FileText },
+  { href: '/portal/convenio', label: 'Meu convênio', desc: 'Empresa e benefícios', icon: Handshake },
+  { href: '/portal/ranking', label: 'Ranking', desc: 'Seu nível no clube', icon: BarChart3 },
+  { href: '/portal/indicacoes', label: 'Indicações', desc: 'Convide e ganhe', icon: Users },
+];
+
+function formatarTokens(v: number | null) {
+  if (v == null) return '—';
+  return v.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+}
 
 export default function PortalInicioPage() {
   const [perfil, setPerfil] = useState<MeuPerfil | null>(null);
+  const [saldo, setSaldo] = useState<number | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [linkIndicacao, setLinkIndicacao] = useState('');
+  const [copiado, setCopiado] = useState(false);
   const usuario = getUsuario();
 
   useEffect(() => {
-    api
-      .get('/cooperados/meu-perfil')
-      .then((res) => setPerfil(res.data))
-      .catch(() => {})
-      .finally(() => setCarregando(false));
+    Promise.all([
+      api.get('/cooperados/meu-perfil').then((r) => setPerfil(r.data)).catch(() => {}),
+      api
+        .get('/cooper-token/saldo')
+        .then((r) => setSaldo(Number(r.data?.saldoDisponivel ?? 0)))
+        .catch(() => setSaldo(null)),
+    ]).finally(() => setCarregando(false));
   }, []);
 
   useEffect(() => {
     if (perfil?.codigoIndicacao) {
-      setLinkIndicacao(`${window.location.origin}/cadastro?ref=${perfil.codigoIndicacao}`);
+      setLinkIndicacao(`${window.location.origin}/entrar?ref=${perfil.codigoIndicacao}`);
     }
   }, [perfil]);
 
   if (carregando) {
     return (
-      <div className="space-y-4">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="h-24 bg-gray-200 animate-pulse rounded-xl" />
-        ))}
+      <div className="space-y-4" aria-busy="true" aria-label="Carregando">
+        <div className="h-8 w-48 animate-pulse rounded-xl bg-black/5" />
+        <div className="h-56 animate-pulse rounded-[28px] bg-black/10" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="h-24 animate-pulse rounded-3xl bg-black/5" />
+          ))}
+        </div>
       </div>
     );
   }
 
   const r = perfil?.resumo;
-  const nome = perfil?.nomeCompleto?.split(' ')[0] ?? usuario?.nome?.split(' ')[0] ?? 'Membro';
-  const alertas = (r?.documentosPendentes ?? 0) + (r?.faturasPendentes ?? 0);
-  const textoWhatsapp = encodeURIComponent(
-    `Olá! Quer economizar na conta de luz? Participe da nossa cooperativa de energia solar! Acesse: ${linkIndicacao}`
-  );
-  const linkWhatsapp = `https://wa.me/?text=${textoWhatsapp}`;
+  const nome = perfil?.nomeCompleto?.split(' ')[0] ?? usuario?.nome?.split(' ')[0] ?? 'Cooperado';
+  const statusAtivo = STATUS_ATIVOS.includes(r?.statusConta ?? '');
+  const textoConvite = `Conheça o Clube COOPERE-BR: até 20% da conta de luz volta em CooperTokens para usar nos parceiros. Sem obra e sem investimento: ${linkIndicacao}`;
+
+  async function copiarLink() {
+    try {
+      await navigator.clipboard.writeText(linkIndicacao);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } catch {
+      /* sem permissão: ignora */
+    }
+  }
+
+  const hora = new Date().getHours();
+  const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
 
   return (
-    <div className="space-y-4">
-      {/* Boas-vindas */}
-      <Card>
-        <CardContent className="pt-4">
-          <h2 className="text-xl font-bold text-gray-800">Olá, {nome}!</h2>
-          <p className="text-sm text-gray-500 mt-1">Bem-vindo ao seu painel.</p>
-        </CardContent>
-      </Card>
+    <div className="space-y-5 lg:space-y-6">
+      {/* Saudação */}
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <p className="text-sm text-[#5b6656]">{saudacao},</p>
+          <h1 className="text-[28px] font-semibold leading-tight lg:text-4xl">{nome}</h1>
+        </div>
+        {r?.statusConta && (
+          <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ${
+              statusAtivo ? 'bg-[#d7ff65] text-[#102012]' : 'bg-amber-100 text-amber-900'
+            }`}
+          >
+            {statusAtivo && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
+            {STATUS_LABEL[r.statusConta] ?? r.statusConta}
+          </span>
+        )}
+      </div>
 
-      {/* Sprint Higiene Bloco B (14/06/2026 — D2): entrada pro Balcão do
-          Clube só pra cooperado-estabelecimento. Card laranja distinto. */}
-      {perfil?.ehEstabelecimento && (
-        <Link href="/estabelecimento" className="block">
-          <Card className="border-orange-300 bg-gradient-to-r from-orange-50 to-amber-50 hover:shadow-md transition-shadow">
-            <CardContent className="pt-4 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-orange-100 p-2.5">
-                  <Store className="h-5 w-5 text-orange-700" />
-                </div>
+      <div className="grid gap-5 lg:grid-cols-3 lg:gap-6">
+        {/* Carteira de tokens */}
+        <section
+          className="relative overflow-hidden rounded-[28px] bg-[#101510] p-5 text-white shadow-xl shadow-black/10 sm:p-7 lg:col-span-2"
+          aria-label="Carteira de CooperTokens"
+        >
+          <div
+            className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full opacity-90"
+            style={{ background: 'conic-gradient(#d7ff65 0deg 72deg, rgba(255,255,255,0.06) 72deg 360deg)' }}
+            aria-hidden="true"
+          />
+          <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-[#101510]" aria-hidden="true" />
+
+          <div className="relative">
+            <p className="flex items-center gap-2 text-sm text-[#c4ccbf]">
+              <Coins className="h-4 w-4 text-[#d7ff65]" aria-hidden="true" />
+              Saldo de CooperTokens
+            </p>
+            <p className="mt-2 text-5xl font-semibold tabular-nums tracking-tight sm:text-6xl">
+              {formatarTokens(saldo)}
+            </p>
+            <p className="mt-2 text-[13px] text-[#a9b3a4]">
+              Até 20% da sua fatura volta aqui todo mês. Use nos parceiros do clube.
+            </p>
+
+            <div className="mt-6 grid grid-cols-4 gap-2 sm:gap-3">
+              {acoesCarteira.map(({ href, label, icon: Icon }) => (
+                <Link
+                  key={label}
+                  href={href}
+                  className="flex flex-col items-center gap-2 rounded-2xl bg-white/10 px-1 py-3 text-center text-[12px] font-medium transition hover:bg-white/15 sm:text-[13px]"
+                >
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#d7ff65]">
+                    <Icon className="h-5 w-5 text-[#102012]" aria-hidden="true" />
+                  </span>
+                  {label}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Números do mês */}
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-1" aria-label="Resumo do mês">
+          <div className="rounded-3xl bg-white p-4 ring-1 ring-black/5 sm:p-5">
+            <Zap className="h-5 w-5 text-[#166534]" aria-hidden="true" />
+            <p className="mt-3 text-xs text-[#5b6656]">kWh alocados no mês</p>
+            <p className="mt-0.5 text-2xl font-semibold tabular-nums">
+              {r?.kwhAlocados ? r.kwhAlocados.toLocaleString('pt-BR') : '0'}
+            </p>
+          </div>
+          <div className="rounded-3xl bg-white p-4 ring-1 ring-black/5 sm:p-5">
+            <Calendar className="h-5 w-5 text-[#166534]" aria-hidden="true" />
+            <p className="mt-3 text-xs text-[#5b6656]">Próximo vencimento</p>
+            <p className="mt-0.5 text-2xl font-semibold tabular-nums">
+              {r?.proximoVencimento ? new Date(r.proximoVencimento).toLocaleDateString('pt-BR') : '—'}
+            </p>
+          </div>
+          {r?.descontoAtual != null && (
+            <div className="col-span-2 rounded-3xl bg-white p-4 ring-1 ring-black/5 sm:p-5 lg:col-span-1">
+              <p className="text-xs text-[#5b6656]">Seu percentual de benefício</p>
+              <p className="mt-0.5 text-2xl font-semibold tabular-nums">{r.descontoAtual}%</p>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* Pendências */}
+      {((r?.documentosPendentes ?? 0) > 0 || (r?.faturasPendentes ?? 0) > 0) && (
+        <section className="space-y-2" aria-label="Pendências">
+          {(r?.faturasPendentes ?? 0) > 0 && (
+            <Link
+              href="/portal/financeiro"
+              className="flex items-center gap-3 rounded-2xl bg-red-50 p-4 ring-1 ring-red-200"
+            >
+              <DollarSign className="h-5 w-5 shrink-0 text-red-700" aria-hidden="true" />
+              <span className="flex-1 text-sm font-medium text-red-900">
+                {r!.faturasPendentes} {r!.faturasPendentes === 1 ? 'fatura em aberto' : 'faturas em aberto'}
+              </span>
+              <ArrowRight className="h-4 w-4 text-red-700" aria-hidden="true" />
+            </Link>
+          )}
+          {(r?.documentosPendentes ?? 0) > 0 && (
+            <Link
+              href="/portal/documentos"
+              className="flex items-center gap-3 rounded-2xl bg-amber-50 p-4 ring-1 ring-amber-200"
+            >
+              <FileWarning className="h-5 w-5 shrink-0 text-amber-800" aria-hidden="true" />
+              <span className="flex-1 text-sm font-medium text-amber-950">
+                {r!.documentosPendentes}{' '}
+                {r!.documentosPendentes === 1 ? 'documento pendente' : 'documentos pendentes'}
+              </span>
+              <ArrowRight className="h-4 w-4 text-amber-800" aria-hidden="true" />
+            </Link>
+          )}
+        </section>
+      )}
+
+      {/* Etapas do cadastro (só quando ainda não está ativo) */}
+      {r?.statusConta && !statusAtivo && (
+        <section className="rounded-3xl bg-white p-5 ring-1 ring-black/5" aria-label="Etapas do cadastro">
+          <h2 className="text-base font-semibold">Etapas do seu cadastro</h2>
+          <ol className="mt-4 space-y-4">
+            <li className="flex gap-3">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-[#166534]" aria-hidden="true" />
+              <p className="text-sm font-medium">Proposta aceita</p>
+            </li>
+            <li className="flex gap-3">
+              {r.statusConta === 'PENDENTE_DOCUMENTOS' ? (
+                <FileText className="h-5 w-5 shrink-0 text-amber-700" aria-hidden="true" />
+              ) : (
+                <CheckCircle2 className="h-5 w-5 shrink-0 text-[#166534]" aria-hidden="true" />
+              )}
+              <div className="flex-1">
+                {r.statusConta === 'PENDENTE_DOCUMENTOS' ? (
+                  <>
+                    <p className="text-sm font-medium text-amber-900">Envie seus documentos</p>
+                    <p className="mt-0.5 text-[13px] text-[#4b5546]">Precisamos deles para seguir com o cadastro.</p>
+                    <Link
+                      href="/portal/documentos"
+                      className="mt-2 inline-flex h-10 items-center gap-1.5 rounded-full bg-[#101510] px-4 text-[13px] font-semibold text-white"
+                    >
+                      <FileText className="h-4 w-4" aria-hidden="true" /> Enviar documentos
+                    </Link>
+                  </>
+                ) : (
+                  <p className="text-sm font-medium">Documentos enviados</p>
+                )}
+              </div>
+            </li>
+            {(r.statusConta === 'PENDENTE_VALIDACAO' || r.statusConta === 'PENDENTE') && (
+              <li className="flex gap-3">
+                <Search className="h-5 w-5 shrink-0 text-blue-700" aria-hidden="true" />
                 <div>
-                  <p className="font-semibold text-orange-900">Entrar no Balcão do Clube</p>
-                  <p className="text-xs text-orange-800">
-                    Receber pagamentos em CooperToken, validar resgates e ver recebimentos.
+                  <p className="text-sm font-medium">Documentos em análise</p>
+                  <p className="mt-0.5 text-[13px] text-[#4b5546]">Nossa equipe está verificando. Em breve você recebe uma resposta.</p>
+                </div>
+              </li>
+            )}
+            {r.statusConta === 'APROVADO' && (
+              <li className="flex gap-3">
+                <PenTool className="h-5 w-5 shrink-0 text-blue-700" aria-hidden="true" />
+                <div>
+                  <p className="text-sm font-medium">Assine seu contrato</p>
+                  <p className="mt-0.5 text-[13px] text-[#4b5546]">
+                    Use o link de assinatura enviado no seu WhatsApp ou e-mail. Não encontrou? Fale com a cooperativa.
                   </p>
                 </div>
-              </div>
-              <span className="text-orange-700 text-sm font-medium shrink-0">→</span>
-            </CardContent>
-          </Card>
+              </li>
+            )}
+          </ol>
+        </section>
+      )}
+
+      {/* Balcão do Clube — só para cooperado-estabelecimento */}
+      {perfil?.ehEstabelecimento && (
+        <Link
+          href="/estabelecimento"
+          className="flex items-center gap-4 rounded-3xl bg-white p-5 ring-1 ring-black/5 transition hover:ring-[#101510]"
+        >
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-orange-100">
+            <Store className="h-6 w-6 text-orange-800" aria-hidden="true" />
+          </span>
+          <span className="flex-1">
+            <span className="block font-semibold">Balcão do Clube</span>
+            <span className="block text-[13px] text-[#4b5546]">Receba em CooperToken e valide resgates.</span>
+          </span>
+          <ArrowRight className="h-5 w-5 text-[#166534]" aria-hidden="true" />
         </Link>
       )}
 
-      {/* Banner de status do cadastro — aparece apenas quando status !== ATIVO */}
-      {r?.statusConta && r.statusConta !== 'ATIVO' && r.statusConta !== 'ATIVO_RECEBENDO_CREDITOS' && (
-        <Card className="border-green-200 bg-gradient-to-r from-green-50 to-emerald-50">
-          <CardContent className="pt-4 space-y-3">
-            <h3 className="text-sm font-semibold text-gray-800">Etapas do seu cadastro</h3>
-            <div className="space-y-2">
-              {/* Etapa 1: Proposta aceita */}
-              <div className="flex items-start gap-3">
-                <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
-                <p className="text-sm text-green-700 font-medium">Proposta aceita</p>
-              </div>
+      {/* Atalhos */}
+      <section aria-label="Atalhos">
+        <h2 className="mb-3 text-base font-semibold">Tudo do seu clube</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {atalhos.map(({ href, label, desc, icon: Icon }) => (
+            <Link
+              key={label}
+              href={href}
+              className="group flex flex-col gap-3 rounded-3xl bg-white p-4 ring-1 ring-black/5 transition hover:-translate-y-0.5 hover:ring-[#101510]"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#f5f7f2] transition group-hover:bg-[#d7ff65]">
+                <Icon className="h-5 w-5 text-[#166534] group-hover:text-[#102012]" aria-hidden="true" />
+              </span>
+              <span>
+                <span className="block text-sm font-semibold">{label}</span>
+                <span className="block text-xs text-[#5b6656]">{desc}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
 
-              {/* Etapa 2: Documentos */}
-              <div className="flex items-start gap-3">
-                {r.statusConta === 'PENDENTE_DOCUMENTOS' ? (
-                  <FileText className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
-                ) : (
-                  <CheckCircle className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
-                )}
-                <div className="flex-1">
-                  {r.statusConta === 'PENDENTE_DOCUMENTOS' ? (
-                    <>
-                      <p className="text-sm text-amber-700 font-medium">Envie seus documentos</p>
-                      <p className="text-xs text-amber-600 mt-0.5">
-                        Precisamos dos seus documentos para prosseguir com o cadastro.
-                      </p>
-                      <Link
-                        href="/portal/documentos"
-                        className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-white bg-amber-500 hover:bg-amber-600 px-3 py-1.5 rounded-md transition-colors"
-                      >
-                        <FileText className="h-3 w-3" /> Enviar documentos
-                      </Link>
-                    </>
-                  ) : (
-                    <p className="text-sm text-green-700 font-medium">Documentos enviados</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Etapa 3: Análise — exibida como ativa apenas se status indica análise em andamento */}
-              {(r.statusConta === 'PENDENTE_VALIDACAO' || r.statusConta === 'PENDENTE') && (
-                <div className="flex items-start gap-3">
-                  <Search className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm text-blue-700 font-medium">Documentos em análise</p>
-                    <p className="text-xs text-blue-600 mt-0.5">
-                      Nossa equipe está verificando — em breve você receberá uma resposta.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Etapa 4: Assinatura */}
-              {r.statusConta === 'APROVADO' && (
-                <div className="flex items-start gap-3">
-                  <PenTool className="h-5 w-5 text-blue-500 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-sm text-blue-700 font-medium">Assine seu contrato</p>
-                    <p className="text-xs text-blue-600 mt-0.5">
-                      Seus documentos foram aprovados! Acesse o link de assinatura enviado no seu
-                      WhatsApp ou email para finalizar o cadastro. Não encontrou? Entre em contato com a cooperativa.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Resumo */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
-            Resumo
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex items-start gap-2">
-              <Percent className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-xs text-gray-500">Desconto</p>
-                <p className="text-lg font-bold text-gray-800">
-                  {r?.descontoAtual != null ? `${r.descontoAtual}%` : '—'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-2">
-              <Calendar className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-xs text-gray-500">Próx. vencimento</p>
-                <p className="text-sm font-semibold text-gray-800">
-                  {r?.proximoVencimento
-                    ? new Date(r.proximoVencimento).toLocaleDateString('pt-BR')
-                    : '—'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-2 col-span-2">
-              <AlertTriangle className="w-5 h-5 text-yellow-500 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-xs text-gray-500">Status</p>
-                <p className={`text-sm font-semibold ${STATUS_COLOR[r?.statusConta ?? ''] ?? 'text-gray-600'}`}>
-                  {STATUS_LABEL[r?.statusConta ?? ''] ?? r?.statusConta ?? '—'}
-                </p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Créditos */}
-      <Card>
-        <CardContent className="pt-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-              <Zap className="w-5 h-5 text-green-700" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500">kWh alocados este mês</p>
-              <p className="text-2xl font-bold text-gray-800">
-                {r?.kwhAlocados ? r.kwhAlocados.toLocaleString('pt-BR') : '0'}
+      {/* Indicar */}
+      {linkIndicacao && (
+        <section className="rounded-3xl bg-[#d7ff65] p-5 text-[#102012] sm:p-6" aria-label="Indicar amigos">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="max-w-md">
+              <h2 className="text-lg font-semibold">Indique e suba de nível</h2>
+              <p className="mt-1 text-sm text-[#2c3d1f]">
+                Cada amigo que entra pelo seu link conta para o seu ranking e recompensas.
               </p>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Alertas */}
-      {alertas > 0 && (
-        <Card className="ring-red-200 bg-red-50/50">
-          <CardContent className="pt-4">
-            <div className="space-y-2">
-              {(r?.documentosPendentes ?? 0) > 0 && (
-                <div className="flex items-center gap-2">
-                  <FileWarning className="w-4 h-4 text-red-500" />
-                  <span className="text-sm text-red-700">
-                    {r!.documentosPendentes} documento(s) pendente(s)
-                  </span>
-                  <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                    {r!.documentosPendentes}
-                  </span>
-                </div>
-              )}
-              {(r?.faturasPendentes ?? 0) > 0 && (
-                <div className="flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-red-500" />
-                  <span className="text-sm text-red-700">
-                    {r!.faturasPendentes} fatura(s) em aberto
-                  </span>
-                  <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                    {r!.faturasPendentes}
-                  </span>
-                </div>
-              )}
+            <div className="flex w-full gap-2 sm:w-auto">
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(textoConvite)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#101510] px-5 text-sm font-semibold text-white sm:flex-none"
+              >
+                <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                Convidar
+              </a>
+              <button
+                type="button"
+                onClick={copiarLink}
+                className="flex h-12 items-center justify-center gap-2 rounded-full border border-[#101510]/25 px-5 text-sm font-semibold"
+              >
+                <Copy className="h-4 w-4" aria-hidden="true" />
+                {copiado ? 'Copiado!' : 'Copiar link'}
+              </button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </section>
       )}
-
-      {/* Links rápidos */}
-      {/*
-        Fatia F-G1 (05/06/2026) — separação de Rios:
-        - "Crédito de Energia (R$)" removido daqui: vira sub-conteúdo da
-          aba "Créditos de Energia" no /portal/financeiro (gated por
-          tipoCooperado=SEM_UC, pois só SEM_UC converte kWh→PIX).
-        - Mantemos só os atalhos universais.
-      */}
-      <div className="grid grid-cols-2 gap-2">
-        {[
-          { href: '/portal/convenio', label: 'Meu Convênio', icon: '🤝' },
-          { href: '/portal/clube', label: 'Clube de Vantagens', icon: '🏆' },
-          { href: '/portal/tokens', label: 'Meus CooperTokens', icon: '🪙' },
-          { href: '/portal/financeiro', label: 'Financeiro', icon: '💼' },
-          { href: '/portal/conta', label: 'Minha Conta', icon: '👤' },
-          { href: '/portal/ranking', label: 'Ranking', icon: '📊' },
-        ].map(item => (
-          <Link key={item.href} href={item.href}
-            className="flex items-center gap-2 p-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 hover:border-green-300 hover:bg-green-50 transition-colors"
-          >
-            <span>{item.icon}</span>
-            <span>{item.label}</span>
-          </Link>
-        ))}
-      </div>
-
-      {/* Ação rápida: WhatsApp */}
-      <a
-        href={linkWhatsapp}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center justify-center gap-2 w-full h-12 text-base font-semibold text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors"
-      >
-        <MessageCircle className="w-5 h-5" />
-        Enviar convite pelo WhatsApp
-      </a>
     </div>
   );
 }
