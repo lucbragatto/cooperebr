@@ -49,19 +49,44 @@ export async function solicitarCodigoLogin(identificador: string): Promise<Solic
 }
 
 /** Confere o código; se o beneficiário ainda não existe no clube, o backend cria o cadastro. */
-export async function validarCodigoLogin(
-  identificador: string,
-  codigo: string,
-): Promise<{ novoCadastro: boolean; nome: string }> {
-  const { data } = await api.post<AuthResponse & { novoCadastro?: boolean }>('/auth/codigo/validar', {
-    identificador,
-    codigo,
-  });
+export type OpcaoTitular = {
+  documento: string;
+  documentoMascarado: string;
+  nome: string | null;
+  tipo: 'PF' | 'PJ';
+};
+
+export type ResultadoCodigo =
+  | { tipo: 'sessao'; novoCadastro: boolean; nome: string }
+  | { tipo: 'escolha'; selecao: string; opcoes: OpcaoTitular[] };
+
+type RespostaCodigo = AuthResponse & {
+  novoCadastro?: boolean;
+  requerEscolha?: boolean;
+  selecao?: string;
+  opcoes?: OpcaoTitular[];
+};
+
+export async function validarCodigoLogin(identificador: string, codigo: string): Promise<ResultadoCodigo> {
+  const { data } = await api.post<RespostaCodigo>('/auth/codigo/validar', { identificador, codigo });
+  if (data.requerEscolha && data.selecao && data.opcoes) {
+    return { tipo: 'escolha', selecao: data.selecao, opcoes: data.opcoes };
+  }
+  return aplicarSessaoCodigo(data);
+}
+
+/** Quando o contato é titular de mais de um CPF/CNPJ: entra na conta escolhida. */
+export async function escolherTitularLogin(selecao: string, documento: string): Promise<ResultadoCodigo> {
+  const { data } = await api.post<RespostaCodigo>('/auth/codigo/escolher', { selecao, documento });
+  return aplicarSessaoCodigo(data);
+}
+
+function aplicarSessaoCodigo(data: RespostaCodigo): ResultadoCodigo {
   Cookies.set(TOKEN_KEY, data.token, COOKIE_OPTS);
   Cookies.set(USUARIO_KEY, JSON.stringify(data.usuario), COOKIE_OPTS);
   localStorage.removeItem('contexto_ativo');
   localStorage.removeItem('contexto_ativo_id');
-  return { novoCadastro: !!data.novoCadastro, nome: data.usuario?.nome ?? '' };
+  return { tipo: 'sessao', novoCadastro: !!data.novoCadastro, nome: data.usuario?.nome ?? '' };
 }
 
 /**

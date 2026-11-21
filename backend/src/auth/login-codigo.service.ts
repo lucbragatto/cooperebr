@@ -78,16 +78,69 @@ export class LoginCodigoService {
       .split(',')
       .map((s) => Number(s.trim()))
       .filter((n) => Number.isFinite(n));
-    const conta = contas.find(
+    const doSistema = contas.filter(
       (c) => c.id_sistema_compensacao != null && permitidos.includes(Number(c.id_sistema_compensacao)),
     );
-    if (!conta) {
+    if (!doSistema.length) {
       throw new ForbiddenException({
         codigo: 'NAO_BENEFICIARIO_COOPEREBR',
         message: 'Não encontramos um cadastro da CoopereBR para este acesso. Faça seu cadastro no clube.',
       });
     }
 
+    // No clube só entra o TITULAR: a conta só vale se o celular/e-mail digitado for o contato
+    // da própria conta. Telefone apenas "autorizado" (tbl_usuario_telefone_acesso) em conta de
+    // outra pessoa não abre sessão — a Function ainda não diz qual é qual, por isso a conferência.
+    const proprias = doSistema.filter((c) => this.contaEhPropria(c, alvo));
+    if (!proprias.length) {
+      this.logger.warn(`Login negado: acesso só autorizado (benef ${doSistema.map((c) => c.id_beneficiario).join(',')})`);
+      throw new ForbiddenException({
+        codigo: 'NAO_TITULAR',
+        message:
+          'Este contato tem acesso autorizado a outra conta, mas não é o titular. No clube, entre com o celular ou e-mail cadastrado como seu.',
+      });
+    }
+
+    const titulares = this.agruparPorDocumento(proprias);
+    if (titulares.length > 1) {
+      // Mesmo contato titular de mais de um CPF/CNPJ (ex.: pessoa e a empresa dela): escolher.
+      const selecao = this.jwtService.sign(
+        { tipo: 'selecao_titular', alvo, titulares },
+        { expiresIn: '5m' },
+      );
+      return {
+        requerEscolha: true,
+        selecao,
+        opcoes: titulares.map((t) => ({
+          documento: t.documento,
+          documentoMascarado: this.mascararDocumento(t.documento),
+          nome: t.conta.nome_beneficiario,
+          tipo: t.documento.length === 14 ? 'PJ' : 'PF',
+        })),
+      };
+    }
+
+    return this.abrirSessao(titulares[0].conta, alvo);
+  }
+
+  /** Segunda etapa quando o contato é titular de mais de um CPF/CNPJ. */
+  async escolherTitular(selecao: string, documento: string) {
+    let dados: any;
+    try {
+      dados = this.jwtService.verify(selecao);
+    } catch {
+      throw new UnauthorizedException('Escolha expirada. Peça um novo código.');
+    }
+    if (dados?.tipo !== 'selecao_titular' || !Array.isArray(dados.titulares)) {
+      throw new UnauthorizedException('Escolha inválida. Peça um novo código.');
+    }
+    const doc = (documento || '').replace(/\D/g, '');
+    const escolhido = dados.titulares.find((t: { documento: string }) => t.documento === doc);
+    if (!escolhido) throw new BadRequestException('Conta não encontrada nesta escolha.');
+    return this.abrirSessao(escolhido.conta, dados.alvo);
+  }
+
+  private async abrirSessao(conta: ContaBeneficiario, alvo: Alvo) {
     const cooperativaId = await this.resolverCooperativaId();
     const { usuario, cooperado } = await this.garantirCadastro(conta, alvo, cooperativaId);
 
@@ -112,6 +165,54 @@ export class LoginCodigoService {
       },
       novoCadastro: cooperado.novo,
     };
+  }
+
+  // ── Titularidade ─────────────────────────────────────────────────────────
+
+  /** A conta é do próprio dono do contato digitado (e não um acesso autorizado a terceiro)? */
+  private contaEhPropria(conta: ContaBeneficiario, alvo: Alvo): boolean {
+    if ('email' in alvo) {
+      return this.emailValido(conta.login_email) === alvo.email;
+    }
+    let tel = this.soDigitos(conta.telefone);
+    if (tel.length >= 12 && tel.startsWith('55')) tel = tel.slice(2);
+    const digitado = alvo.telefone;
+    if (tel.length < 10) return false;
+    // mesmo DDD e mesmos 8 últimos dígitos (aceita com e sem o 9 extra)
+    return tel.slice(0, 2) === digitado.slice(0, 2) && tel.slice(-8) === digitado.slice(-8);
+  }
+
+  /** Um titular por CPF/CNPJ; guarda só os campos usados (nada de token_fatura). */
+  private agruparPorDocumento(contas: ContaBeneficiario[]) {
+    const mapa = new Map<string, { documento: string; conta: ContaBeneficiario }>();
+    for (const c of contas) {
+      const documento = this.soDigitos(c.cpf_cnpj_beneficiario);
+      if (documento.length !== 11 && documento.length !== 14) continue;
+      if (mapa.has(documento)) continue;
+      mapa.set(documento, {
+        documento,
+        conta: {
+          id_usuario: c.id_usuario,
+          id_beneficiario: c.id_beneficiario,
+          nome_beneficiario: c.nome_beneficiario,
+          cpf_cnpj_beneficiario: documento,
+          login_email: c.login_email,
+          telefone: c.telefone,
+          id_sistema_compensacao: c.id_sistema_compensacao,
+          sistema_nome: c.sistema_nome,
+        },
+      });
+    }
+    if (!mapa.size) {
+      throw new UnprocessableCadastro('Cadastro da CoopereBR sem CPF/CNPJ válido. Fale com o atendimento.');
+    }
+    return [...mapa.values()];
+  }
+
+  private mascararDocumento(doc: string): string {
+    return doc.length === 14
+      ? `${doc.slice(0, 2)}.***.***/${doc.slice(8, 12)}-**`
+      : `***.${doc.slice(3, 6)}.***-**`;
   }
 
   // ── Provisionamento ──────────────────────────────────────────────────────

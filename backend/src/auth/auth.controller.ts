@@ -79,6 +79,14 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 300000, limit: 10 } })
+  @HttpCode(200)
+  @Post('codigo/escolher')
+  escolherTitular(@Body() body: { selecao: string; documento: string }) {
+    return this.loginCodigo.escolherTitular(body?.selecao, body?.documento);
+  }
+
+  @Public()
   @Throttle({ default: { ttl: 60000, limit: 3 } })
   @Post('criar-super-admin')
   criarSuperAdmin(

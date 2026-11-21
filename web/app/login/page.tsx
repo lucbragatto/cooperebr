@@ -16,9 +16,12 @@ import {
   UserPlus,
 } from 'lucide-react';
 import {
+  escolherTitularLogin,
   login,
   solicitarCodigoLogin,
   validarCodigoLogin,
+  type OpcaoTitular,
+  type ResultadoCodigo,
   type SolicitarCodigoResposta,
 } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
@@ -62,7 +65,10 @@ const CREDENCIAIS_TESTE: CredTeste[] = [
 // NEXT_PUBLIC_AMBIENTE_REAL não definido OU 'false' → dev → mostra box.
 const isProducao = process.env.NEXT_PUBLIC_AMBIENTE_REAL === 'true';
 
-type Etapa = 'identificacao' | 'codigo' | 'boasvindas' | 'senha';
+type Etapa = 'identificacao' | 'codigo' | 'escolha' | 'boasvindas' | 'senha';
+
+// Erros do login por código que pedem o cadastro próprio no clube
+const CODIGOS_SEM_CADASTRO = ['NAO_BENEFICIARIO_COOPEREBR', 'NAO_TITULAR'];
 
 const REENVIO_SEGUNDOS = 60;
 
@@ -89,6 +95,8 @@ export default function LoginPage() {
   const [envio, setEnvio] = useState<SolicitarCodigoResposta | null>(null);
   const [reenvioEm, setReenvioEm] = useState(0);
   const [nome, setNome] = useState('');
+  const [selecao, setSelecao] = useState('');
+  const [opcoes, setOpcoes] = useState<OpcaoTitular[]>([]);
   const [erro, setErro] = useState('');
   const [semCadastro, setSemCadastro] = useState(false);
   const [carregando, setCarregando] = useState(false);
@@ -132,15 +140,9 @@ export default function LoginPage() {
       setErro('');
       setCarregando(true);
       try {
-        const r = await validarCodigoLogin(identificador, valor);
-        if (r.novoCadastro) {
-          setNome(r.nome.split(' ')[0] || '');
-          setEtapa('boasvindas');
-        } else {
-          router.push('/selecionar-contexto');
-        }
+        concluir(await validarCodigoLogin(identificador, valor));
       } catch (err) {
-        if (codigoErro(err) === 'NAO_BENEFICIARIO_COOPEREBR') setSemCadastro(true);
+        if (CODIGOS_SEM_CADASTRO.includes(codigoErro(err) ?? '')) setSemCadastro(true);
         setErro(mensagemErro(err, 'Código inválido. Confira ou peça um novo.'));
         setCodigo('');
       } finally {
@@ -148,8 +150,35 @@ export default function LoginPage() {
         validandoRef.current = false;
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [identificador, router],
   );
+
+  function concluir(r: ResultadoCodigo) {
+    if (r.tipo === 'escolha') {
+      setSelecao(r.selecao);
+      setOpcoes(r.opcoes);
+      setErro('');
+      setEtapa('escolha');
+    } else if (r.novoCadastro) {
+      setNome(r.nome.split(' ')[0] || '');
+      setEtapa('boasvindas');
+    } else {
+      router.push('/selecionar-contexto');
+    }
+  }
+
+  async function escolher(documento: string) {
+    setErro('');
+    setCarregando(true);
+    try {
+      concluir(await escolherTitularLogin(selecao, documento));
+    } catch (err) {
+      setErro(mensagemErro(err, 'Não foi possível entrar nesta conta. Peça um novo código.'));
+    } finally {
+      setCarregando(false);
+    }
+  }
 
   async function entrarComSenha(e: React.FormEvent) {
     e.preventDefault();
@@ -177,7 +206,7 @@ export default function LoginPage() {
     setSenha(c.senha);
   }
 
-  const passo = etapa === 'codigo' ? 2 : etapa === 'boasvindas' ? 3 : 1;
+  const passo = etapa === 'codigo' || etapa === 'escolha' ? 2 : etapa === 'boasvindas' ? 3 : 1;
   const destino = envio?.telefoneMascarado || envio?.emailMascarado || 'seu contato cadastrado';
 
   return (
@@ -389,6 +418,40 @@ export default function LoginPage() {
                 >
                   {carregando ? 'Entrando...' : 'Entrar no Clube'}
                 </button>
+              </div>
+            )}
+
+            {etapa === 'escolha' && (
+              <div className="space-y-4">
+                <h2 className="text-[28px] font-semibold leading-tight lg:text-[34px]">Qual conta você quer acessar?</h2>
+                <p className="text-[15px] leading-relaxed text-[#4b5546]">
+                  Este contato é titular de mais de um cadastro. Depois você pode entrar na outra conta
+                  pedindo um novo código.
+                </p>
+                <ul className="space-y-2.5">
+                  {opcoes.map((o) => (
+                    <li key={o.documento}>
+                      <button
+                        type="button"
+                        onClick={() => escolher(o.documento)}
+                        disabled={carregando}
+                        className="flex w-full items-center gap-3 rounded-2xl border-[1.5px] border-[#dfe5d8] p-4 text-left transition hover:border-[#101510] disabled:opacity-60"
+                      >
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#101510] text-xs font-semibold text-[#d7ff65]">
+                          {o.tipo}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[15px] font-semibold">{o.nome || 'Titular'}</span>
+                          <span className="block text-[13px] text-[#5b6656]">
+                            {o.tipo === 'PJ' ? 'CNPJ' : 'CPF'} {o.documentoMascarado}
+                          </span>
+                        </span>
+                        <ArrowRight className="h-4 w-4 shrink-0 text-[#166534]" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                {erro && <p className="text-sm text-red-700">{erro}</p>}
               </div>
             )}
 
